@@ -8,10 +8,25 @@ class Provider(AbstractModel):
 
 
 class Database(AbstractModel):
-    name = models.CharField(db_index=True)
-    user = models.CharField(db_index=True)
-    password = models.CharField(max_length=128)
-    host = models.CharField()
+    POSTGRESQL = "postgresql"
+    MARIADB_MYSQL = "mariadb_mysql"
+    SQLITE3 = "sqlite3"
+    PROVIDER_CHOICES = [
+        (POSTGRESQL, "PostgreSQL"),
+        (MARIADB_MYSQL, "MariaDB/MySQL"),
+        (SQLITE3, "SQLite3"),
+    ]
+
+    name = models.CharField(db_index=True, max_length=255)
+    user = models.CharField(db_index=True, max_length=255)
+    password = models.TextField()
+    host = models.CharField(max_length=255)
+    port = models.IntegerField()
+    provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        default=POSTGRESQL,
+    )
 
     def set_password(self, raw_password):
         self.password = make_password(raw_password)
