@@ -8,6 +8,16 @@ import questionary
 def main(base_dir: Path | None = None) -> None:
     base_dir = base_dir or Path(__file__).resolve().parent
 
+    env_path = base_dir / ".env"
+    if env_path.exists():
+        replace = questionary.confirm(
+            ".env already exists. Do you want to replace it?",
+            default=False,
+        ).ask()
+        if not replace:
+            print("\nSetup aborted")
+            return None
+
     secret_key = getpass.getpass("Your SECRET KEY: ")
     secret_key = secret_key.strip()
 
@@ -25,16 +35,6 @@ def main(base_dir: Path | None = None) -> None:
     if not time_zone:
         print("\nYou have to select a timezone. Setup aborted")
         return None
-
-    env_path = base_dir / ".env"
-    if env_path.exists():
-        replace = questionary.confirm(
-            ".env already exists. Do you want to replace it?",
-            default=False,
-        ).ask()
-        if not replace:
-            print("\nSetup aborted")
-            return None
 
     with open(env_path, "w") as env_file:
         env_file.write(f"SECRET_KEY={secret_key}\n")
