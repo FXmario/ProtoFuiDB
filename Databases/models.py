@@ -8,9 +8,9 @@ class Provider(AbstractModel):
 
 
 class Database(AbstractModel):
-    POSTGRESQL = "postgresql"
-    MARIADB_MYSQL = "mariadb_mysql"
-    SQLITE3 = "sqlite3"
+    POSTGRESQL = "django.db.backends.postgresql"
+    MARIADB_MYSQL = "django.db.backends.mysql"
+    SQLITE3 = "django.db.backends.sqlite3"
     PROVIDER_CHOICES = [
         (POSTGRESQL, "PostgreSQL"),
         (MARIADB_MYSQL, "MariaDB/MySQL"),
@@ -23,7 +23,7 @@ class Database(AbstractModel):
     host = models.CharField(max_length=255)
     port = models.IntegerField()
     provider = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=PROVIDER_CHOICES,
         default=POSTGRESQL,
     )
