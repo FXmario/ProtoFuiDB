@@ -26,7 +26,17 @@ def main(base_dir: Path | None = None) -> None:
         print("\nYou have to select a timezone. Setup aborted")
         return None
 
-    with open(base_dir / ".env", "w") as env_file:
+    env_path = base_dir / ".env"
+    if env_path.exists():
+        replace = questionary.confirm(
+            ".env already exists. Do you want to replace it?",
+            default=False,
+        ).ask()
+        if not replace:
+            print("\nSetup aborted")
+            return None
+
+    with open(env_path, "w") as env_file:
         env_file.write(f"SECRET_KEY={secret_key}\n")
         env_file.write(f"TZ={time_zone}\n")
 
