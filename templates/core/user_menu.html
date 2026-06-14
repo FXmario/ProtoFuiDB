@@ -1,0 +1,30 @@
+{% if user.is_authenticated %}
+<div class="dropdown dropdown-end">
+    <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar placeholder">
+        <div class="bg-primary text-primary-content w-10 rounded-full">
+            <span class="text-lg">{{ user.username|first|upper }}</span>
+        </div>
+    </div>
+    <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
+        <li>
+            <a
+                href="{% url 'user-detail' %}"
+                hx-get="{% url 'user-detail' %}"
+                hx-target="#main-content"
+                hx-select="#main-content"
+            >User Detail</a>
+        </li>
+        <li>
+            <a href="#">Add more db</a>
+        </li>
+        <li>
+            <form id="logout-form" method="post" action="{% url 'logout' %}" class="w-full" hx-boost="false">
+                {% csrf_token %}
+                <button type="submit" class="w-full text-left">Logout</button>
+            </form>
+        </li>
+    </ul>
+</div>
+{% else %}
+<a href="{% url 'login' %}" class="btn btn-sm btn-outline">Login</a>
+{% endif %}

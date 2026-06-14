@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Login - FuiDB{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-base-200 p-4">
+    <div class="card w-full max-w-md bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h1 class="card-title text-2xl font-bold justify-center">Login to FuiDB</h1>
+
+            <form
+                method="post"
+                action="{% url 'login' %}"
+                class="w-full space-y-4"
+                hx-boost="false"
+            >
+                {% csrf_token %}
+
+                <input type="hidden" name="next" value="{{ next|default:'/' }}" />
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-error alert-soft">
+                        {% for error in form.non_field_errors %}
+                            <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="form-control w-full">
+                    <label class="label" for="id_username">
+                        <span class="label-text font-medium">Username</span>
+                    </label>
+                    <input
+                        type="text"
+                        name="username"
+                        id="id_username"
+                        value="{{ form.username.value|default:'' }}"
+                        class="input input-bordered w-full{% if form.username.errors %} input-error{% endif %}"
+                        required
+                        autofocus
+                    />
+                    {% if form.username.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.username.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                </div>
+
+                <div class="form-control w-full">
+                    <label class="label" for="id_password">
+                        <span class="label-text font-medium">Password</span>
+                    </label>
+                    <input
+                        type="password"
+                        name="password"
+                        id="id_password"
+                        class="input input-bordered w-full{% if form.password.errors %} input-error{% endif %}"
+                        required
+                    />
+                    {% if form.password.errors %}
+                        <label class="label">
+                            <span class="label-text-alt text-error">{{ form.password.errors.0 }}</span>
+                        </label>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full">
+                    Login
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,33 @@
 import pytest
+from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from Databases.models import Database
+
+User = get_user_model()
+
+
+@pytest.mark.django_db
+def test_dashboard_index_redirects_to_login_when_not_authenticated(client):
+    response = client.get(reverse("database-dashboard"))
+    assert response.status_code == 302
+    assert reverse("login") in response.url
+
+
+@pytest.mark.django_db
+def test_dashboard_index_renders_for_authenticated_user(client):
+    user = User.objects.create_superuser(username="admin", password="testpass123")
+    client.force_login(user)
+
+    response = client.get(reverse("database-dashboard"))
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Database Dashboard" in content
+    assert "PostgreSQL Prod" in content
+    assert "MariaDB Dev" in content
+    assert "SQLite3 Local" in content
+    assert "users" in content
+    assert "orders" in content
 
 
 @pytest.fixture

@@ -1,0 +1,43 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}Dashboard - FuiDB{% endblock %}
+
+{% block topbar %}
+{% include "navbar.html" %}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="max-w-6xl mx-auto animate-slide-up">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold tracking-tight">Database Dashboard</h1>
+        <p class="text-base-content/70 mt-1">
+            Select a database from the top tabs and a table from the sidebar.
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+        <div class="stat card-hover surface-elevated-strong rounded-2xl">
+            <div class="stat-title text-base-content/60">Tables</div>
+            <div class="stat-value text-primary">4</div>
+            <div class="stat-desc">Across all databases</div>
+        </div>
+        <div class="stat card-hover surface-elevated-strong rounded-2xl">
+            <div class="stat-title text-base-content/60">Records</div>
+            <div class="stat-value text-secondary">1,234</div>
+            <div class="stat-desc">Total rows tracked</div>
+        </div>
+        <div class="stat card-hover surface-elevated-strong rounded-2xl">
+            <div class="stat-title text-base-content/60">Databases</div>
+            <div class="stat-value text-accent">3</div>
+            <div class="stat-desc">Active connections</div>
+        </div>
+    </div>
+
+    <div class="card card-hover surface-elevated-strong rounded-2xl">
+        <div class="card-body">
+            <h2 class="card-title text-lg font-bold">Recent Activity</h2>
+            <p class="text-base-content/70">No recent activity to show.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

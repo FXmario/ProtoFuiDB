@@ -1,0 +1,71 @@
+{% extends "base_dashboard.html" %}
+
+{% block title %}User Detail - FuiDB{% endblock %}
+
+{% block topbar %}
+{% include "navbar.html" %}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="max-w-2xl mx-auto animate-slide-up">
+    <div class="mb-4">
+        <a
+            href="{% url 'database-dashboard' %}"
+            hx-get="{% url 'database-dashboard' %}"
+            hx-target="#main-content"
+            hx-select="#main-content"
+            class="btn btn-ghost btn-sm"
+        >← Back to Dashboard</a>
+    </div>
+    <div class="card card-hover surface-elevated-strong rounded-2xl">
+        <div class="card-body">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="avatar placeholder">
+                    <div class="bg-primary text-primary-content w-16 rounded-full">
+                        <span class="text-2xl">{{ user.username|first|upper }}</span>
+                    </div>
+                </div>
+                <div>
+                    <h1 class="card-title text-2xl font-bold">{{ user.username }}</h1>
+                    <p class="text-base-content/70">Manage your account settings</p>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">Username</span></label>
+                    <input type="text" value="{{ user.username }}" class="input input-bordered w-full bg-base-200/50" disabled />
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">Email</span></label>
+                    <input type="text" value="{{ user.email|default:'Not set' }}" class="input input-bordered w-full bg-base-200/50" disabled />
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-medium">Date joined</span></label>
+                        <input type="text" value="{{ user.date_joined|date:'Y-m-d H:i' }}" class="input input-bordered w-full bg-base-200/50" disabled />
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-medium">Last login</span></label>
+                        <input type="text" value="{{ user.last_login|date:'Y-m-d H:i'|default:'Never' }}" class="input input-bordered w-full bg-base-200/50" disabled />
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-actions justify-end mt-8 gap-2">
+            <a
+                href="{% url 'password_change' %}"
+                class="btn btn-outline btn-primary"
+            >Change Password</a>
+            <a
+                href="{% url 'change-username' %}"
+                class="btn btn-primary"
+            >Change Username</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

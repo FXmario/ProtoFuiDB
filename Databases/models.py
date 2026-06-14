@@ -3,10 +3,6 @@ from django.db import models
 from core.models import AbstractModel
 
 
-class Provider(AbstractModel):
-    pass
-
-
 class Database(AbstractModel):
     POSTGRESQL = "django.db.backends.postgresql"
     MARIADB_MYSQL = "django.db.backends.mysql"

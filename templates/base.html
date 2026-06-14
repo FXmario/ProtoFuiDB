@@ -1,0 +1,71 @@
+{% load tailwind_tags %}
+{% load static %}
+{% load django_htmx %}
+
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FuiDB{% endblock %}</title>
+    {% tailwind_css %}
+    {% htmx_script %}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshEEA/AKvD5CWgwg+Fp7v4ovwgR8d7YPp/lEKtqlV9CpiDAF7e1cOR" crossorigin="anonymous"></script>
+    <script>
+        (function () {
+            const STORAGE_KEY = "fuidb-theme";
+            const DARK_THEME = "dark";
+            const LIGHT_THEME = "light";
+
+            function getSystemTheme() {
+                if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                    return DARK_THEME;
+                }
+                return LIGHT_THEME;
+            }
+
+            function getStoredTheme() {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored === DARK_THEME || stored === LIGHT_THEME) {
+                    return stored;
+                }
+                // migrate old "black" preference
+                if (stored === "black") {
+                    localStorage.setItem(STORAGE_KEY, DARK_THEME);
+                    return DARK_THEME;
+                }
+                return null;
+            }
+
+            function applyTheme(theme) {
+                document.documentElement.setAttribute("data-theme", theme);
+                localStorage.setItem(STORAGE_KEY, theme);
+            }
+
+            window.toggleTheme = function () {
+                const current = document.documentElement.getAttribute("data-theme");
+                const next = current === DARK_THEME ? LIGHT_THEME : DARK_THEME;
+                applyTheme(next);
+            };
+
+            applyTheme(getStoredTheme() || getSystemTheme());
+
+            document.addEventListener("htmx:afterSwap", function () {
+                applyTheme(getStoredTheme() || getSystemTheme());
+            });
+        })();
+    </script>
+</head>
+<body hx-boost="true" hx-indicator="#page-loader">
+    <div id="page-loader" class="htmx-indicator fixed inset-0 z-50 flex items-center justify-center bg-base-100/80 glass">
+        <span class="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+
+    {% block layout %}
+    <main id="main-content" class="min-h-screen flex flex-col animate-fade-in">
+        {% block content %}{% endblock %}
+    </main>
+    {% endblock %}
+</body>
+</html>

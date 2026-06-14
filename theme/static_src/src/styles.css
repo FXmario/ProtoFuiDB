@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/**
+  * A catch-all path to Django template files, JavaScript, and Python files
+  * that contain Tailwind CSS classes and will be scanned by Tailwind to generate the final CSS file.
+  *
+  * If your final CSS file is not being updated after code changes, you may want to broaden or narrow
+  * the scope of this path.
+  */
+@source "../../../**/*.{html,py,js}";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: oklch(var(--bc) / 0.2);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(var(--bc) / 0.35);
+  }
+}
+
+@layer utilities {
+  .glass {
+    background-color: oklch(var(--b1) / 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .card-hover {
+    transition-property: box-shadow, background-color;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+  }
+
+  .card-hover:hover {
+    box-shadow: 0 20px 25px -5px oklch(var(--bc) / 0.1), 0 8px 10px -6px oklch(var(--bc) / 0.1);
+  }
+
+  .surface-elevated {
+    background-color: oklch(var(--b1));
+    box-shadow: 0 1px 3px 0 oklch(var(--bc) / 0.08), 0 1px 2px -1px oklch(var(--bc) / 0.08);
+  }
+
+  .surface-elevated-strong {
+    background-color: oklch(var(--b1));
+    box-shadow: 0 10px 15px -3px oklch(var(--bc) / 0.1), 0 4px 6px -4px oklch(var(--bc) / 0.1);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 300ms ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 300ms ease-out;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Complete - FuiDB{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-base-200 p-4">
+    <div class="card w-full max-w-lg bg-base-100 shadow-xl">
+        <div class="card-body items-center text-center">
+            <h1 class="card-title text-3xl font-bold">Superuser Created</h1>
+            <p class="text-base-content/70 mt-2">
+                Your superuser account has been set up successfully.
+                Log in to access the dashboard.
+            </p>
+            <div class="card-actions mt-6">
+                <a href="{% url 'login' %}" class="btn btn-primary">Login</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
