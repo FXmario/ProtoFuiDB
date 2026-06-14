@@ -9,10 +9,8 @@
             <h1 class="card-title text-2xl font-bold justify-center">Login to FuiDB</h1>
 
             <form
-                hx-post="{% url 'login' %}"
-                hx-target="#main-content"
-                hx-select="#main-content"
-                hx-push-url="true"
+                action="{% url 'login' %}"
+                method="post"
                 class="w-full space-y-4"
             >
                 {% csrf_token %}

@@ -26,7 +26,7 @@ def database_create(request: HttpRequest) -> HttpResponse:
             if raw_password:
                 db.set_password(raw_password)
             db.save()
-            return redirect(reverse("database-dashboard"))
+            return redirect(reverse("index"))
     else:
         form = DatabaseForm()
 

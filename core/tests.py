@@ -148,12 +148,21 @@ def test_index_redirects_to_register_when_no_users_exist(client):
 
 
 @pytest.mark.django_db
-def test_index_redirects_to_database_dashboard_when_users_exist(client):
+def test_index_renders_dashboard_for_authenticated_user(client):
+    User.objects.create_superuser(username="admin", password="testpass123")
+    client.login(username="admin", password="testpass123")
+
+    response = client.get(reverse("index"))
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_index_redirects_to_login_for_unauthenticated_user(client):
     User.objects.create_superuser(username="admin", password="testpass123")
 
     response = client.get(reverse("index"))
     assert response.status_code == 302
-    assert response.url == reverse("database-dashboard")
+    assert response.url == reverse("login")
 
 
 @pytest.mark.django_db
@@ -188,7 +197,7 @@ def test_register_superuser_creates_superuser(client):
     )
 
     assert response.status_code == 302
-    assert response.url == reverse("database-dashboard")
+    assert response.url == reverse("index")
     assert User.objects.filter(username="admin").exists()
 
     user = User.objects.get(username="admin")

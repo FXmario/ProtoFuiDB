@@ -7,6 +7,8 @@ from django.forms import CharField, Form
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from Databases.models import Database
+
 User = get_user_model()
 
 
@@ -53,7 +55,10 @@ class CustomLoginView(LoginView):
 def index(request):
     if not User.objects.exists():
         return redirect(reverse("register-superuser"))
-    return redirect(reverse("database-dashboard"))
+    if not request.user.is_authenticated:
+        return redirect(reverse("login"))
+    databases = Database.objects.all()
+    return render(request, "Databases/dashboard_index.html", {"databases": databases})
 
 
 def register_superuser(request):
@@ -67,7 +72,7 @@ def register_superuser(request):
             user.is_superuser = True
             user.is_staff = True
             user.save()
-            return redirect(reverse("database-dashboard"))
+            return redirect(reverse("index"))
     else:
         form = UserCreationForm()
 

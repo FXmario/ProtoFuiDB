@@ -69,7 +69,7 @@ def test_database_create_works(client):
         },
     )
     assert response.status_code == 302
-    assert response.url == reverse("database-dashboard")
+    assert response.url == reverse("index")
     assert Database.objects.filter(name="mydb").exists()
     db = Database.objects.get(name="mydb")
     assert db.check_password("secretpass123")
