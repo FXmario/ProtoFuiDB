@@ -22,12 +22,64 @@ def test_dashboard_index_renders_for_authenticated_user(client):
     response = client.get(reverse("database-dashboard"))
     assert response.status_code == 200
     content = response.content.decode()
+    assert "No databases yet" in content
+    assert "Add Database" in content
+
+
+@pytest.mark.django_db
+def test_dashboard_index_shows_data_when_databases_exist(client):
+    user = User.objects.create_superuser(username="admin", password="testpass123")
+    client.force_login(user)
+    db = Database(name="test_db", user="test_user", host="localhost", port=5432, provider=Database.POSTGRESQL)
+    db.set_password("testpass")
+    db.save()
+
+    response = client.get(reverse("database-dashboard"))
+    assert response.status_code == 200
+    content = response.content.decode()
     assert "Database Dashboard" in content
-    assert "PostgreSQL Prod" in content
-    assert "MariaDB Dev" in content
-    assert "SQLite3 Local" in content
-    assert "users" in content
-    assert "orders" in content
+    assert "1" in content
+
+
+@pytest.mark.django_db
+def test_database_create_page_renders(client):
+    user = User.objects.create_superuser(username="admin", password="testpass123")
+    client.force_login(user)
+
+    response = client.get(reverse("database-create"))
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Add Database" in content
+
+
+@pytest.mark.django_db
+def test_database_create_works(client):
+    user = User.objects.create_superuser(username="admin", password="testpass123")
+    client.force_login(user)
+
+    response = client.post(
+        reverse("database-create"),
+        {
+            "name": "mydb",
+            "user": "admin",
+            "raw_password": "secretpass123",
+            "host": "localhost",
+            "port": 5432,
+            "provider": Database.POSTGRESQL,
+        },
+    )
+    assert response.status_code == 302
+    assert response.url == reverse("database-dashboard")
+    assert Database.objects.filter(name="mydb").exists()
+    db = Database.objects.get(name="mydb")
+    assert db.check_password("secretpass123")
+
+
+@pytest.mark.django_db
+def test_database_create_requires_login(client):
+    response = client.get(reverse("database-create"))
+    assert response.status_code == 302
+    assert reverse("login") in response.url
 
 
 @pytest.fixture

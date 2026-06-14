@@ -1,0 +1,11 @@
+{% if show_file_field %}
+<div class="form-control w-full" id="file-field-wrapper">
+    <label class="label" for="id_file">
+        <span class="label-text font-medium">Database File</span>
+    </label>
+    <input type="file" name="file" id="id_file" class="file-input file-bordered w-full" accept=".db,.sqlite,.sqlite3">
+    <label class="label">
+        <span class="label-text-alt">Upload a .db, .sqlite, or .sqlite3 file</span>
+    </label>
+</div>
+{% endif %}

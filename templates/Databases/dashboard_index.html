@@ -7,7 +7,8 @@
 {% endblock %}
 
 {% block dashboard_content %}
-<div class="max-w-6xl mx-auto animate-slide-up">
+<div id="dashboard-content" class="max-w-6xl mx-auto animate-slide-up">
+    {% if databases %}
     <div class="mb-8">
         <h1 class="text-3xl font-bold tracking-tight">Database Dashboard</h1>
         <p class="text-base-content/70 mt-1">
@@ -28,7 +29,7 @@
         </div>
         <div class="stat card-hover surface-elevated-strong rounded-2xl">
             <div class="stat-title text-base-content/60">Databases</div>
-            <div class="stat-value text-accent">3</div>
+            <div class="stat-value text-accent">{{ databases|length }}</div>
             <div class="stat-desc">Active connections</div>
         </div>
     </div>
@@ -39,5 +40,25 @@
             <p class="text-base-content/70">No recent activity to show.</p>
         </div>
     </div>
+    {% else %}
+    <div class="flex flex-col items-center justify-center py-20">
+        <div class="w-24 h-24 rounded-full bg-base-200 flex items-center justify-center mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-12 h-12 stroke-base-content/40">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+            </svg>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">No databases yet</h2>
+        <p class="text-base-content/70 mb-6 text-center max-w-md">
+            Get started by connecting your first database. You can add PostgreSQL, MariaDB/MySQL, or SQLite3.
+        </p>
+        <a
+            href="{% url 'database-create' %}"
+            hx-get="{% url 'database-create' %}"
+            hx-target="#dashboard-content"
+            hx-select="#dashboard-content"
+            class="btn btn-primary"
+        >Add Database</a>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
