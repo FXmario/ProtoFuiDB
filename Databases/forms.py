@@ -30,9 +30,10 @@ class DatabaseForm(forms.ModelForm):
 
     class Meta:
         model = Database
-        fields = ["name", "user", "host", "port", "provider", "file"]
+        fields = ["name", "db_name", "user", "host", "port", "provider", "file"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "db_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "user": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "host": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "provider": forms.Select(attrs={

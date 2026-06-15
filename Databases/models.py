@@ -18,6 +18,7 @@ class Database(AbstractModel):
     ]
 
     name = models.CharField(db_index=True, max_length=255)
+    db_name = models.CharField(db_index=True, max_length=255, default="")
     user = models.CharField(db_index=True, max_length=255, blank=True, default="")
     password = models.TextField(blank=True, default="")
     host = models.CharField(max_length=255, blank=True, default="")
