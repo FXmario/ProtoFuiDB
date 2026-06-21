@@ -19,6 +19,15 @@ class Database(AbstractModel):
         (SQLITE3, "SQLite3"),
     ]
 
+    UNKNOWN = "unknown"
+    CONNECTED = "connected"
+    DISCONNECTED = "disconnected"
+    STATUS_CHOICES = [
+        (UNKNOWN, "Unknown"),
+        (CONNECTED, "Connected"),
+        (DISCONNECTED, "Disconnected"),
+    ]
+
     SQLGLOT_DIALECTS = {
         POSTGRESQL: "postgres",
         MARIADB_MYSQL: "mysql",
@@ -44,6 +53,11 @@ class Database(AbstractModel):
         blank=True,
         null=True,
         help_text="Upload a .db file (required for SQLite3).",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=UNKNOWN,
     )
 
     def set_password(self, raw_password):

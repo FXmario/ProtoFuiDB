@@ -1,41 +1,76 @@
-<div class="navbar glass border-b border-base-300 px-4 sticky top-0 z-30">
-    <div class="flex-none">
+<div class="navbar glass border-b border-base-300 px-4 sticky top-0 z-30 shadow-sm">
+    <div class="navbar-start gap-1">
         <button type="button" onclick="toggleSidebar()" class="btn btn-square btn-ghost" aria-label="Toggle sidebar">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-6 h-6 stroke-current">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
             </svg>
         </button>
     </div>
-    <div class="flex-1 flex gap-2 overflow-x-auto py-2 px-2">
-        {% for db in databases %}
-        <a class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-all hover:bg-base-200 hover:border-primary-soft {% if database.public_id == db.public_id %}bg-primary-soft border-primary-soft text-primary{% else %}border-base-300 text-base-content/70 bg-base-100/50{% endif %}"
-           hx-get="{% url 'database-detail' db.public_id %}"
-           hx-target="#dashboard-content"
-           hx-select="#dashboard-content"
-           hx-select-oob="#dashboard-sidebar"
-           hx-swap="outerHTML"
-           hx-push-url="true">
-            <span class="w-2 h-2 rounded-full shrink-0 {% if db.provider == 'django.db.backends.postgresql' %}provider-postgres-dot{% elif db.provider == 'django.db.backends.mysql' %}provider-mysql-dot{% else %}provider-sqlite-dot{% endif %}"></span>
-            {{ db.name }}
-        </a>
-        {% empty %}
-        <span class="text-base-content/50 text-sm">No databases connected</span>
-        {% endfor %}
+    <div class="navbar-center hidden lg:flex">
+        <ul class="menu menu-horizontal gap-2 px-1">
+            {% for db in databases %}
+            <li>
+                <a class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-all hover:bg-base-200 hover:border-primary-soft {% if active_db_id == db.public_id %}bg-primary-soft border-primary-soft text-primary{% else %}border-base-300 text-base-content/70 bg-base-100/50{% endif %}"
+                   {% if active_db_id == db.public_id %}aria-current="page"{% endif %}
+                   hx-get="{% url 'database-detail' db.public_id %}"
+                   hx-target="#dashboard-content"
+                   hx-select="#dashboard-content"
+                   hx-select-oob="#dashboard-sidebar"
+                   hx-swap="outerHTML"
+                   hx-push-url="true">
+                    <span class="w-2 h-2 rounded-full shrink-0 status-{{ db.status }}"
+                          title="{{ db.get_status_display }}"></span>
+                    {{ db.name }}
+                </a>
+            </li>
+            {% empty %}
+            <li class="text-base-content/50 text-sm flex items-center px-3">No databases connected</li>
+            {% endfor %}
+        </ul>
     </div>
-    <div class="flex-none flex items-center gap-2">
+    <div class="navbar-end gap-1">
+        <div class="dropdown lg:hidden">
+            <div tabindex="0" role="button" class="btn btn-square btn-ghost" aria-label="Databases">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+            </div>
+            <ul tabindex="0" class="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow">
+                {% for db in databases %}
+                <li>
+                    <a class="flex items-center gap-2 {% if active_db_id == db.public_id %}active{% endif %}"
+                       hx-get="{% url 'database-detail' db.public_id %}"
+                       hx-target="#dashboard-content"
+                       hx-select="#dashboard-content"
+                       hx-select-oob="#dashboard-sidebar"
+                       hx-swap="outerHTML"
+                       hx-push-url="true">
+                        <span class="w-2 h-2 rounded-full shrink-0 status-{{ db.status }}"
+                              title="{{ db.get_status_display }}"></span>
+                        {{ db.name }}
+                    </a>
+                </li>
+                {% empty %}
+                <li class="text-base-content/50 text-sm">No databases connected</li>
+                {% endfor %}
+            </ul>
+        </div>
         <a
             hx-get="{% url 'database-create' %}"
             hx-target="#dashboard-content"
             hx-select="#dashboard-content"
+            hx-select-oob="#dashboard-sidebar"
+            hx-swap="outerHTML"
+            hx-push-url="true"
             class="btn btn-square btn-ghost"
             aria-label="Add database"
         >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-5 h-5 stroke-current">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
             </svg>
         </a>
         <button type="button" onclick="toggleTheme()" class="btn btn-square btn-ghost" aria-label="Toggle theme">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-5 h-5 stroke-current">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
             </svg>
         </button>

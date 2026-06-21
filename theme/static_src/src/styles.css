@@ -75,6 +75,10 @@
   .bg-primary-soft { background-color: oklch(var(--p) / 0.1); }
   .border-primary-soft { border-color: oklch(var(--p) / 0.4); }
 
+  .status-connected { background-color: oklch(var(--su)); }
+  .status-disconnected { background-color: oklch(var(--er)); }
+  .status-unknown { background-color: oklch(var(--bc) / 0.3); }
+
   .text-balance {
     text-wrap: balance;
   }

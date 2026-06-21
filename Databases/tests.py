@@ -430,6 +430,16 @@ def test_database_detail_renders_sqlite(client, sqlite_database):
 
 
 @pytest.mark.django_db
+def test_database_detail_sets_status_connected(client, sqlite_database):
+    assert sqlite_database.status == Database.UNKNOWN
+    client.get(
+        reverse("database-detail", kwargs={"public_id": sqlite_database.public_id})
+    )
+    sqlite_database.refresh_from_db()
+    assert sqlite_database.status == Database.CONNECTED
+
+
+@pytest.mark.django_db
 @patch("Databases.views.list_tables", side_effect=DatabaseQueryError("Simulated connection failure"))
 def test_database_detail_shows_connection_error(mock_list_tables, client):
     user = User.objects.create_superuser(username="admin", password="testpass123")
@@ -449,6 +459,64 @@ def test_database_detail_shows_connection_error(mock_list_tables, client):
     assert response.status_code == 200
     content = response.content.decode()
     assert "Simulated connection failure" in content
+
+
+@pytest.mark.django_db
+@patch("Databases.views.list_tables", side_effect=DatabaseQueryError("Simulated connection failure"))
+def test_database_detail_sets_status_disconnected(mock_list_tables, client):
+    user = User.objects.create_superuser(username="admin", password="testpass123")
+    client.force_login(user)
+    db = Database.objects.create(
+        name="pg_remote",
+        provider=Database.POSTGRESQL,
+        db_name="x",
+        user="x",
+        host="x",
+        port=5432,
+        owner=user,
+    )
+    db.set_password("x")
+    db.save()
+    assert db.status == Database.UNKNOWN
+    client.get(reverse("database-detail", kwargs={"public_id": db.public_id}))
+    db.refresh_from_db()
+    assert db.status == Database.DISCONNECTED
+
+
+@pytest.mark.django_db
+def test_database_status_defaults_to_unknown(client):
+    user = User.objects.create_superuser(username="admin", password="testpass123")
+    db = Database.objects.create(
+        name="newdb",
+        provider=Database.POSTGRESQL,
+        db_name="x",
+        user="x",
+        host="x",
+        port=5432,
+        owner=user,
+    )
+    assert db.status == Database.UNKNOWN
+
+
+@pytest.mark.django_db
+def test_navbar_shows_status_dot_class(client, sqlite_database):
+    # Before visiting detail, status is "unknown" on dashboard index
+    response = client.get(reverse("database-dashboard"))
+    content = response.content.decode()
+    assert "status-unknown" in content
+
+    # After visiting detail, status becomes "connected"
+    client.get(reverse("database-detail", kwargs={"public_id": sqlite_database.public_id}))
+    response = client.get(reverse("database-detail", kwargs={"public_id": sqlite_database.public_id}))
+    content = response.content.decode()
+    assert "status-connected" in content
+
+
+@pytest.mark.django_db
+def test_navbar_active_tab_has_aria_current(client, sqlite_database):
+    response = client.get(reverse("database-detail", kwargs={"public_id": sqlite_database.public_id}))
+    content = response.content.decode()
+    assert 'aria-current="page"' in content
 
 
 @pytest.mark.django_db

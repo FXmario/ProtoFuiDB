@@ -126,10 +126,16 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
         context["tables"] = list_tables(database)
         context["schema_json"] = json.dumps(_build_schema(database))
         context["error"] = None
+        if database.status != Database.CONNECTED:
+            database.status = Database.CONNECTED
+            database.save(update_fields=["status"])
     except (DatabaseQueryError, UnsupportedProviderError) as e:
         context["tables"] = []
         context["schema_json"] = "{}"
         context["error"] = str(e)
+        if database.status != Database.DISCONNECTED:
+            database.status = Database.DISCONNECTED
+            database.save(update_fields=["status"])
         return render(request, "Databases/database_detail.html", context)
 
     active_table = request.GET.get("table", "") or (context["tables"][0] if context["tables"] else "")

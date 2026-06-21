@@ -1,28 +1,54 @@
-<div id="query-panel" class="card surface-elevated-strong rounded-2xl">
-    <div class="card-body space-y-4">
-        <div class="flex items-center justify-between">
-            <h2 class="card-title text-lg font-bold">SQL Editor</h2>
-            <span class="text-xs text-base-content/50">Dialect: {{ provider_label }}</span>
+<div id="query-panel" class="card surface-elevated-strong rounded-2xl overflow-hidden">
+    <div class="card-body p-0 space-y-0">
+        <!-- Editor header bar -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-base-300 bg-base-200/50">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-primary-soft flex items-center justify-center text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-4 h-4 stroke-current" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-sm font-bold leading-tight">SQL Editor</h2>
+                    <p class="text-xs text-base-content/50 leading-tight">{{ database.name }}</p>
+                </div>
+            </div>
+            <span class="badge badge-sm badge-ghost gap-1 text-xs">
+                <span class="w-1.5 h-1.5 rounded-full {% if database.provider == 'django.db.backends.postgresql' %}provider-postgres-dot{% elif database.provider == 'django.db.backends.mysql' %}provider-mysql-dot{% else %}provider-sqlite-dot{% endif %}"></span>
+                {{ provider_label }}
+            </span>
         </div>
 
-        <form class="sql-editor-host space-y-3" onsubmit="return false;">
+        <!-- Editor + toolbar -->
+        <form class="sql-editor-host" onsubmit="return false;">
             {% csrf_token %}
             <input type="hidden" name="provider" id="sql-provider" value="{{ database.provider }}">
             <textarea
                 id="sql-editor"
                 name="query"
-                class="textarea textarea-bordered w-full font-mono text-sm"
+                class="textarea textarea-bordered w-full font-mono text-sm rounded-none border-0"
                 rows="8"
                 spellcheck="false"
             >{{ query }}</textarea>
 
-            <div class="flex justify-end">
+            <div class="flex items-center justify-between px-4 py-2 border-t border-base-300 bg-base-200/30">
+                <div class="flex items-center gap-2 text-xs text-base-content/40">
+                    <kbd class="kbd kbd-sm">Ctrl</kbd>
+                    <span>+</span>
+                    <kbd class="kbd kbd-sm">Enter</kbd>
+                    <span class="ml-1">to run</span>
+                </div>
                 <button type="button"
-                        class="btn btn-primary"
+                        id="run-query-btn"
+                        class="btn btn-primary btn-sm gap-2"
                         hx-post="{% url 'database-run-query' database.public_id %}"
                         hx-include="closest form"
                         hx-target="#query-results"
                         hx-swap="innerHTML">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-4 h-4 stroke-current" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
                     Run Query
                 </button>
             </div>
@@ -30,7 +56,8 @@
 
         {{ schema_json|json_script:"schema" }}
 
-        <div id="query-results">
+        <!-- Results section -->
+        <div id="query-results" class="border-t border-base-300">
             {% include "Databases/partials/query_results.html" %}
         </div>
     </div>
@@ -64,77 +91,92 @@
             schema = {};
         }
 
-        function attachLinter(container, EditorView, linter, sqlExtension) {
-            async function sqlLinter(view) {
-                const query = view.state.doc.toString();
-                const provider = document.getElementById("sql-provider").value;
-                const csrfToken = getCookie("csrftoken");
-                try {
-                    const response = await fetch("{% url 'database-lint-sql' %}", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/x-www-form-urlencoded",
-                            "X-CSRFToken": csrfToken,
-                        },
-                        body: new URLSearchParams({ query, provider }),
-                    });
-                    if (!response.ok) return [];
-                    const data = await response.json();
-                    return (data.diagnostics || []).map((d) => {
-                        const totalLines = view.state.doc.lines;
-                        const lineNumber = Math.min(Math.max(d.line || 1, 1), totalLines);
-                        const line = view.state.doc.line(lineNumber);
-                        const col = Math.max((d.col || 1) - 1, 0);
-                        const from = Math.min(line.from + col, line.to);
-                        const to = Math.min(from + 1, line.to);
-                        return { from, to, message: d.message || "Syntax error", severity: "error" };
-                    });
-                } catch (err) {
-                    return [];
-                }
-            }
+        async function sqlLinter(view) {
+            const query = view.state.doc.toString();
+            const provider = document.getElementById("sql-provider").value;
+            const csrfToken = getCookie("csrftoken");
             try {
-                new EditorView({
-                    doc: textarea.value,
-                    extensions: [
-                        sqlExtension,
-                        linter(sqlLinter, { delay: 500 }),
-                        EditorView.updateListener.of((update) => {
-                            if (update.docChanged) {
-                                textarea.value = update.state.doc.toString();
-                            }
-                        }),
-                        EditorView.theme({ "&": { height: "220px" }, ".cm-scroller": { overflow: "auto" } }),
-                    ],
-                    parent: container,
+                const response = await fetch("{% url 'database-lint-sql' %}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRFToken": csrfToken,
+                    },
+                    body: new URLSearchParams({ query, provider }),
                 });
-                textarea.classList.add("hidden");
+                if (!response.ok) return [];
+                const data = await response.json();
+                return (data.diagnostics || []).map((d) => {
+                    const totalLines = view.state.doc.lines;
+                    const lineNumber = Math.min(Math.max(d.line || 1, 1), totalLines);
+                    const line = view.state.doc.line(lineNumber);
+                    const col = Math.max((d.col || 1) - 1, 0);
+                    const from = Math.min(line.from + col, line.to);
+                    const to = Math.min(from + 1, line.to);
+                    return { from, to, message: d.message || "Syntax error", severity: "error" };
+                });
             } catch (err) {
-                container.remove();
-                textarea.classList.remove("hidden");
-                const note = document.createElement("p");
-                note.className = "text-xs text-base-content/50";
-                note.textContent = "Rich editor unavailable — raw editor shown below.";
-                textarea.parentNode.insertBefore(note, textarea);
+                return [];
             }
         }
 
         try {
             const editorContainer = document.createElement("div");
-            editorContainer.className = "codemirror-editor border border-base-300 rounded-lg overflow-hidden";
+            editorContainer.className = "codemirror-editor border-b border-base-300 overflow-hidden";
             textarea.parentNode.insertBefore(editorContainer, textarea.nextSibling);
 
             const { EditorView, basicSetup } = await import("https://esm.sh/codemirror@6.0.1");
             const { sql } = await import("https://esm.sh/@codemirror/lang-sql@6.7.1");
             const { linter } = await import("https://esm.sh/@codemirror/lint@6.8.1");
 
-            attachLinter(editorContainer, EditorView, linter, sql({ schema, upperCaseKeywords: true }));
+            const editorTheme = EditorView.theme({
+                "&": {
+                    "height": "220px",
+                    "font-size": "13px",
+                    "border-radius": "0",
+                },
+                ".cm-scroller": { overflow: "auto", "font-family": "var(--font-mono)" },
+                "&.cm-focused": { outline: "none" },
+                ".cm-gutters": {
+                    "background-color": "oklch(var(--b2) / 0.5)",
+                    "border-right": "1px solid oklch(var(--bc) / 0.1)",
+                },
+                ".cm-activeLine": { "background-color": "oklch(var(--bc) / 0.04)" },
+                ".cm-activeLineGutter": { "background-color": "oklch(var(--bc) / 0.06)" },
+                ".cm-lintMarker-error": { "color": "oklch(var(--er))" },
+                ".cm-diagnosticText-error": { "color": "oklch(var(--er))" },
+            });
+
+            const view = new EditorView({
+                doc: textarea.value,
+                extensions: [
+                    basicSetup,
+                    sql({ schema, upperCaseKeywords: true }),
+                    linter(sqlLinter, { delay: 500 }),
+                    editorTheme,
+                    EditorView.updateListener.of((update) => {
+                        if (update.docChanged) {
+                            textarea.value = update.state.doc.toString();
+                        }
+                    }),
+                    EditorView.domEventHandlers({
+                        keydown: (event) => {
+                            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                                event.preventDefault();
+                                document.getElementById("run-query-btn")?.click();
+                            }
+                        },
+                    }),
+                ],
+                parent: editorContainer,
+            });
+            textarea.classList.add("hidden");
         } catch (err) {
             const editorContainer = document.querySelector(".codemirror-editor");
             if (editorContainer) editorContainer.remove();
             textarea.classList.remove("hidden");
             const note = document.createElement("p");
-            note.className = "text-xs text-base-content/50";
+            note.className = "text-xs text-base-content/50 px-2 py-1";
             note.textContent = "Rich editor unavailable — raw editor shown below.";
             textarea.parentNode.insertBefore(note, textarea);
         }
