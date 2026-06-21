@@ -8,14 +8,14 @@
     </div>
     <div class="flex-1 flex gap-2 overflow-x-auto py-2 px-2">
         {% for db in databases %}
-        <a class="tab tab-lifted gap-2 {% if database.public_id == db.public_id %}tab-active{% endif %}"
+        <a class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-all hover:bg-base-200 hover:border-primary-soft {% if database.public_id == db.public_id %}bg-primary-soft border-primary-soft text-primary{% else %}border-base-300 text-base-content/70 bg-base-100/50{% endif %}"
            hx-get="{% url 'database-detail' db.public_id %}"
            hx-target="#dashboard-content"
            hx-select="#dashboard-content"
            hx-select-oob="#dashboard-sidebar"
            hx-swap="outerHTML"
            hx-push-url="true">
-            <span class="w-2 h-2 rounded-full bg-primary"></span>
+            <span class="w-2 h-2 rounded-full shrink-0 {% if db.provider == 'django.db.backends.postgresql' %}provider-postgres-dot{% elif db.provider == 'django.db.backends.mysql' %}provider-mysql-dot{% else %}provider-sqlite-dot{% endif %}"></span>
             {{ db.name }}
         </a>
         {% empty %}

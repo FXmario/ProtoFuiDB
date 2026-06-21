@@ -60,6 +60,21 @@
     box-shadow: 0 10px 15px -3px oklch(var(--bc) / 0.1), 0 4px 6px -4px oklch(var(--bc) / 0.1);
   }
 
+  .provider-postgres-bg { background-color: oklch(var(--in) / 0.1); }
+  .provider-postgres-text { color: oklch(var(--in)); }
+  .provider-postgres-dot { background-color: oklch(var(--in)); }
+
+  .provider-mysql-bg { background-color: oklch(var(--wa) / 0.1); }
+  .provider-mysql-text { color: oklch(var(--wa)); }
+  .provider-mysql-dot { background-color: oklch(var(--wa)); }
+
+  .provider-sqlite-bg { background-color: oklch(var(--su) / 0.1); }
+  .provider-sqlite-text { color: oklch(var(--su)); }
+  .provider-sqlite-dot { background-color: oklch(var(--su)); }
+
+  .bg-primary-soft { background-color: oklch(var(--p) / 0.1); }
+  .border-primary-soft { border-color: oklch(var(--p) / 0.4); }
+
   .text-balance {
     text-wrap: balance;
   }

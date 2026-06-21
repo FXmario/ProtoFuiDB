@@ -132,7 +132,7 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
         context["error"] = str(e)
         return render(request, "Databases/database_detail.html", context)
 
-    active_table = request.GET.get("table", "")
+    active_table = request.GET.get("table", "") or (context["tables"][0] if context["tables"] else "")
     if active_table:
         if active_table in context["tables"]:
             try:
