@@ -1,0 +1,7 @@
+<td class="font-mono text-xs {% if error %}bg-error/20 text-error{% endif %}" data-column="{{ column }}">
+    {% if error %}
+        <span title="{{ error }}" class="cursor-help">{{ value }}</span>
+    {% else %}
+        {{ value }}
+    {% endif %}
+</td>

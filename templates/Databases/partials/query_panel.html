@@ -23,6 +23,8 @@
         <form class="sql-editor-host" onsubmit="return false;">
             {% csrf_token %}
             <input type="hidden" name="provider" id="sql-provider" value="{{ database.provider }}">
+            <input type="hidden" name="active_table" value="{{ active_table|default:'' }}">
+            <input type="hidden" name="pk_column" value="{{ pk_column|default:'' }}">
             <textarea
                 id="sql-editor"
                 name="query"

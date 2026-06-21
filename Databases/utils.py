@@ -210,6 +210,110 @@ def run_query(database: Database, query: str) -> tuple[list[str], list[tuple[Any
         conn.close()
 
 
+def _quote_identifier(database: Database, name: str) -> str:
+    """Quote an identifier according to the database provider."""
+    if database.provider == Database.MARIADB_MYSQL:
+        return _quote_mysql_identifier(name)
+    return _quote_sqlite_identifier(name)
+
+
+def get_primary_key(database: Database, table_name: str) -> str | None:
+    """Return the first primary-key column name for a table, or None."""
+    tables = list_tables(database)
+    _validate_table_name(database, table_name, tables)
+
+    conn = open_connection(database)
+    try:
+        cursor = conn.cursor()
+        if database.provider == Database.POSTGRESQL:
+            cursor.execute(
+                """
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a
+                  ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                WHERE i.indrelid = %s::regclass AND i.indisprimary
+                ORDER BY array_position(i.indkey, a.attnum)
+                LIMIT 1
+                """,
+                (table_name,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+        if database.provider == Database.MARIADB_MYSQL:
+            cursor.execute(f"SHOW COLUMNS FROM {_quote_mysql_identifier(table_name)}")
+            for col_row in cursor.fetchall():
+                if col_row[3] == "PRI":
+                    return col_row[0]
+            return None
+
+        if database.provider == Database.SQLITE3:
+            cursor.execute(
+                f"SELECT name FROM pragma_table_info({_quote_sqlite_identifier(table_name)}) WHERE pk > 0 ORDER BY pk LIMIT 1"
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+        return None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def update_cell(
+    database: Database,
+    table_name: str,
+    column: str,
+    row_id: str,
+    value: str,
+    pk_column: str,
+) -> str:
+    """Execute UPDATE table SET column = value WHERE pk = row_id.
+
+    Returns the new value as a string.  Raises DatabaseQueryError on failure.
+    """
+    tables = list_tables(database)
+    _validate_table_name(database, table_name, tables)
+
+    table_q = _quote_identifier(database, table_name)
+    column_q = _quote_identifier(database, column)
+    pk_q = _quote_identifier(database, pk_column)
+
+    conn = open_connection(database)
+    try:
+        cursor = conn.cursor()
+        if database.provider == Database.POSTGRESQL:
+            cursor.execute(
+                f"UPDATE {table_q} SET {column_q} = %s WHERE {pk_q} = %s",
+                (value, row_id),
+            )
+        elif database.provider == Database.MARIADB_MYSQL:
+            cursor.execute(
+                f"UPDATE {table_q} SET {column_q} = %s WHERE {pk_q} = %s",
+                (value, row_id),
+            )
+        else:
+            cursor.execute(
+                f"UPDATE {table_q} SET {column_q} = ? WHERE {pk_q} = ?",
+                (value, row_id),
+            )
+        conn.commit()
+
+        cursor.execute(
+            f"SELECT {column_q} FROM {table_q} WHERE {pk_q} = ?",
+            (row_id,) if database.provider == Database.SQLITE3 else (row_id,),
+        )
+        row = cursor.fetchone()
+        return str(row[0]) if row else value
+    except Exception as e:
+        conn.rollback()
+        raise DatabaseQueryError(str(e)) from e
+    finally:
+        conn.close()
+
+
 def lint_sql(query: str, provider: str) -> list[dict[str, Any]]:
     """Return a list of syntax diagnostics for the given SQL query."""
     dialect = sqlglot_dialect(provider)

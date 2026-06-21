@@ -7,7 +7,7 @@ from django.core.files import File
 from django.urls import reverse
 
 from Databases.models import Database
-from Databases.utils import check_db_connection, DatabaseQueryError, list_tables, run_query
+from Databases.utils import check_db_connection, DatabaseQueryError, list_tables, run_query, get_primary_key, update_cell
 
 User = get_user_model()
 
@@ -669,3 +669,303 @@ def test_run_query_postgres():
     assert columns == ["id", "name"]
     assert rows == [(1, "Alice")]
     mock_cursor.execute.assert_called_once_with("SELECT * FROM users")
+
+
+# ---------------------------------------------------------------------------
+# Cell editing tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_get_primary_key_sqlite(client, sqlite_database):
+    pk = get_primary_key(sqlite_database, "users")
+    assert pk == "id"
+
+
+@pytest.mark.django_db
+def test_get_primary_key_returns_none_for_no_pk(settings, tmp_path):
+    user = User.objects.create_superuser(username="admin", password="testpass123")
+    db_file = tmp_path / "noprimary.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("CREATE TABLE view_no_pk (a TEXT, b TEXT)")
+    conn.close()
+
+    db = Database.objects.create(name="noprimary", provider=Database.SQLITE3, owner=user)
+    with open(db_file, "rb") as f:
+        db.file.save("noprimary.db", File(f))
+    db.refresh_from_db()
+
+    pk = get_primary_key(db, "view_no_pk")
+    assert pk is None
+
+
+@pytest.mark.django_db
+def test_update_cell_sqlite(sqlite_database):
+    new_val = update_cell(sqlite_database, "users", "name", "1", "Charlie", "id")
+    assert new_val == "Charlie"
+
+    conn = sqlite3.connect(sqlite_database.file.path)
+    cursor = conn.execute("SELECT name FROM users WHERE id = 1")
+    assert cursor.fetchone()[0] == "Charlie"
+    conn.close()
+
+
+@pytest.mark.django_db
+def test_update_cell_nonexistent_column(sqlite_database):
+    with pytest.raises(DatabaseQueryError):
+        update_cell(sqlite_database, "users", "nonexistent_col", "1", "Ghost", "id")
+
+
+@pytest.mark.django_db
+def test_cell_edit_view_updates_value(client, sqlite_database):
+    response = client.post(
+        reverse("database-cell-edit", kwargs={"public_id": sqlite_database.public_id}),
+        {
+            "table": "users",
+            "column": "name",
+            "row_id": "1",
+            "value": "UpdatedName",
+        },
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "UpdatedName" in content
+    conn = sqlite3.connect(sqlite_database.file.path)
+    cursor = conn.execute("SELECT name FROM users WHERE id = 1")
+    assert cursor.fetchone()[0] == "UpdatedName"
+    conn.close()
+
+
+@pytest.mark.django_db
+def test_cell_edit_view_no_pk(settings, tmp_path, client):
+    user = User.objects.create_superuser(username="admin2", password="testpass123")
+    client.force_login(user)
+    db_file = tmp_path / "noprimary2.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("CREATE TABLE no_pk_table (a TEXT, b TEXT)")
+    conn.close()
+
+    db = Database.objects.create(name="npk", provider=Database.SQLITE3, owner=user)
+    with open(db_file, "rb") as f:
+        db.file.save("noprimary2.db", File(f))
+    db.refresh_from_db()
+
+    response = client.post(
+        reverse("database-cell-edit", kwargs={"public_id": db.public_id}),
+        {
+            "table": "no_pk_table",
+            "column": "a",
+            "row_id": "1",
+            "value": "test",
+        },
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_cell_edit_view_missing_params(client, sqlite_database):
+    response = client.post(
+        reverse("database-cell-edit", kwargs={"public_id": sqlite_database.public_id}),
+        {"table": "users"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_cell_edit_view_requires_login(settings, tmp_path, client):
+    user = User.objects.create_superuser(username="login_test", password="testpass123")
+    settings.MEDIA_ROOT = str(tmp_path)
+    db_file = tmp_path / "login_test.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("CREATE TABLE tbl (id INTEGER PRIMARY KEY, v TEXT)")
+    conn.close()
+
+    from django.test import Client
+    unauth_client = Client()
+    db = Database.objects.create(name="lt_db", provider=Database.SQLITE3, owner=user)
+    with open(db_file, "rb") as f:
+        db.file.save("login_test.db", File(f))
+    db.refresh_from_db()
+
+    response = unauth_client.post(
+        reverse("database-cell-edit", kwargs={"public_id": db.public_id}),
+        {
+            "table": "tbl",
+            "column": "v",
+            "row_id": "1",
+            "value": "test",
+        },
+    )
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_cell_edit_view_404_for_other_owner(client, sqlite_database):
+    other = User.objects.create_user(username="other_user", password="testpass123")
+    client.force_login(other)
+    response = client.post(
+        reverse("database-cell-edit", kwargs={"public_id": sqlite_database.public_id}),
+        {
+            "table": "users",
+            "column": "name",
+            "row_id": "1",
+            "value": "test",
+        },
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_database_detail_includes_editable_badge(client, sqlite_database):
+    response = client.get(
+        reverse("database-detail", kwargs={"public_id": sqlite_database.public_id})
+    )
+    content = response.content.decode()
+    assert "Editable" in content
+
+
+@pytest.mark.django_db
+def test_database_detail_includes_readonly_badge(settings, tmp_path, client):
+    user = User.objects.create_superuser(username="ro_admin", password="testpass123")
+    client.force_login(user)
+    settings.MEDIA_ROOT = str(tmp_path)
+
+    db_file = tmp_path / "readonly.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("CREATE TABLE no_pk_tbl (val TEXT)")
+    conn.close()
+
+    db = Database.objects.create(name="ro_db", provider=Database.SQLITE3, owner=user)
+    with open(db_file, "rb") as f:
+        db.file.save("readonly.db", File(f))
+    db.refresh_from_db()
+
+    response = client.get(reverse("database-detail", kwargs={"public_id": db.public_id}))
+    content = response.content.decode()
+    assert "Read-only" in content
+
+
+# ---------------------------------------------------------------------------
+# Sorting tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_table_sort_view_asc(client, sqlite_database):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "users"},
+        ),
+        {"sort": "name", "dir": "asc"},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Alice" in content
+    assert "Bob" in content
+    assert content.index("Alice") < content.index("Bob")
+
+
+@pytest.mark.django_db
+def test_table_sort_view_desc(client, sqlite_database):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "users"},
+        ),
+        {"sort": "name", "dir": "desc"},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert content.index("Bob") < content.index("Alice")
+
+
+@pytest.mark.django_db
+def test_table_sort_view_invalid_dir_defaults_asc(client, sqlite_database):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "users"},
+        ),
+        {"sort": "name", "dir": "sideways"},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert content.index("Alice") < content.index("Bob")
+
+
+@pytest.mark.django_db
+def test_table_sort_view_invalid_column_ignored(client, sqlite_database):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "users"},
+        ),
+        {"sort": "nonexistent_col", "dir": "asc"},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Alice" in content
+    assert "Bob" in content
+
+
+@pytest.mark.django_db
+def test_table_sort_view_nonexistent_table(client, sqlite_database):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "ghost"},
+        ),
+        {"sort": "name", "dir": "asc"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_table_sort_view_requires_login(client, sqlite_database):
+    from django.test import Client
+    unauth_client = Client()
+    response = unauth_client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "users"},
+        ),
+        {"sort": "name", "dir": "asc"},
+    )
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_table_sort_view_asc_shows_up_arrow(client, sqlite_database):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "users"},
+        ),
+        {"sort": "name", "dir": "asc"},
+    )
+    content = response.content.decode()
+    assert "rotate-180" in content
+
+
+@pytest.mark.django_db
+def test_table_sort_view_desc_shows_down_arrow(client, sqlite_database):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database.public_id, "table_name": "users"},
+        ),
+        {"sort": "name", "dir": "desc"},
+    )
+    content = response.content.decode()
+    assert "rotate-180" not in content
+
+
+@pytest.mark.django_db
+def test_database_detail_includes_sort_headers(client, sqlite_database):
+    response = client.get(
+        reverse("database-detail", kwargs={"public_id": sqlite_database.public_id})
+    )
+    content = response.content.decode()
+    assert "/sort" in content
+    assert "sort=" in content

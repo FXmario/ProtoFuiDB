@@ -12,9 +12,11 @@ from Databases.utils import (
     check_db_connection,
     DatabaseQueryError,
     get_columns,
+    get_primary_key,
     lint_sql,
     list_tables,
     run_query,
+    update_cell,
     UnsupportedProviderError,
 )
 
@@ -148,12 +150,21 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
                 context["columns"] = columns
                 context["rows"] = rows
                 context["active_table"] = active_table
+                pk_col = get_primary_key(database, active_table)
+                context["pk_column"] = pk_col
+                context["pk_index"] = columns.index(pk_col) if pk_col and pk_col in columns else None
+                context["sort_column"] = ""
+                context["sort_dir"] = "asc"
             except (DatabaseQueryError, UnsupportedProviderError) as e:
                 context["query"] = f"SELECT * FROM {_quote_identifier(active_table)} LIMIT 100"
                 context["columns"] = []
                 context["rows"] = []
                 context["error"] = str(e)
                 context["active_table"] = active_table
+                context["pk_column"] = None
+                context["pk_index"] = None
+                context["sort_column"] = ""
+                context["sort_dir"] = "asc"
         else:
             context["error"] = f"Table {active_table!r} does not exist."
 
@@ -202,7 +213,16 @@ def table_query(request: HttpRequest, public_id: str, table_name: str) -> HttpRe
         "rows": rows,
         "error": error,
         "schema_json": json.dumps(_build_schema(database)),
+        "active_table": table_name,
+        "pk_column": get_primary_key(database, table_name),
+        "pk_index": None,
     }
+    try:
+        pk_col = context["pk_column"]
+        if pk_col and pk_col in columns:
+            context["pk_index"] = columns.index(pk_col)
+    except Exception:
+        pass
     return render(request, "Databases/partials/query_panel.html", context)
 
 
@@ -210,6 +230,8 @@ def table_query(request: HttpRequest, public_id: str, table_name: str) -> HttpRe
 def run_query_view(request: HttpRequest, public_id: str) -> HttpResponse:
     database = _get_database_or_404(request, public_id)
     query = request.POST.get("query", "").strip()
+    active_table = request.POST.get("active_table", "").strip()
+    pk_column = request.POST.get("pk_column", "").strip() or None
 
     try:
         columns, rows = run_query(database, query)
@@ -224,8 +246,98 @@ def run_query_view(request: HttpRequest, public_id: str) -> HttpResponse:
         "columns": columns,
         "rows": rows,
         "error": error,
+        "active_table": active_table,
+        "pk_column": pk_column,
+        "pk_index": None,
+    }
+    if pk_column and pk_column in columns:
+        context["pk_index"] = columns.index(pk_column)
+    return render(request, "Databases/partials/query_results.html", context)
+
+
+@login_required
+def table_sort_view(request: HttpRequest, public_id: str, table_name: str) -> HttpResponse:
+    database = _get_database_or_404(request, public_id)
+    sort_column = request.GET.get("sort", "").strip()
+    sort_dir = request.GET.get("dir", "asc").strip().lower()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+
+    try:
+        tables = list_tables(database)
+        if table_name not in tables:
+            return HttpResponse(f"Table {table_name!r} does not exist.", status=404)
+
+        column_names = [c[0] for c in get_columns(database, table_name)]
+        if sort_column and sort_column not in column_names:
+            sort_column = ""
+
+        order_clause = ""
+        if sort_column:
+            order_clause = f" ORDER BY {_quote_identifier(sort_column)} {sort_dir.upper()}"
+
+        query = f"SELECT * FROM {_quote_identifier(table_name)}{order_clause} LIMIT 100"
+        columns, rows = run_query(database, query)
+        error = None
+    except (DatabaseQueryError, UnsupportedProviderError) as e:
+        query = f"SELECT * FROM {_quote_identifier(table_name)} LIMIT 100"
+        columns, rows = [], []
+        error = str(e)
+
+    pk_col = get_primary_key(database, table_name)
+    pk_index = None
+    if pk_col and pk_col in columns:
+        pk_index = columns.index(pk_col)
+
+    context = {
+        "database": database,
+        "columns": columns,
+        "rows": rows,
+        "error": error,
+        "active_table": table_name,
+        "pk_column": pk_col,
+        "pk_index": pk_index,
+        "sort_column": sort_column,
+        "sort_dir": sort_dir,
     }
     return render(request, "Databases/partials/query_results.html", context)
+
+
+@login_required
+def cell_edit_view(request: HttpRequest, public_id: str) -> HttpResponse:
+    database = _get_database_or_404(request, public_id)
+
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    table = request.POST.get("table", "").strip()
+    column = request.POST.get("column", "").strip()
+    row_id = request.POST.get("row_id", "").strip()
+    value = request.POST.get("value", "").strip()
+
+    if not all([table, column, row_id]):
+        return JsonResponse({"error": "Missing parameters"}, status=400)
+
+    pk_column = get_primary_key(database, table)
+    if not pk_column:
+        return JsonResponse(
+            {"error": "This table has no primary key — editing is disabled."},
+            status=403,
+        )
+
+    try:
+        new_value = update_cell(database, table, column, row_id, value, pk_column)
+        error = None
+    except (DatabaseQueryError, UnsupportedProviderError) as e:
+        new_value = value
+        error = str(e)
+
+    context = {
+        "value": new_value,
+        "error": error,
+        "column": column,
+    }
+    return render(request, "Databases/partials/cell_edit.html", context)
 
 
 @login_required
