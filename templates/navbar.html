@@ -8,7 +8,13 @@
     </div>
     <div class="flex-1 flex gap-2 overflow-x-auto py-2 px-2">
         {% for db in databases %}
-        <a class="tab tab-lifted gap-2" href="#">
+        <a class="tab tab-lifted gap-2 {% if database.public_id == db.public_id %}tab-active{% endif %}"
+           hx-get="{% url 'database-detail' db.public_id %}"
+           hx-target="#dashboard-content"
+           hx-select="#dashboard-content"
+           hx-select-oob="#dashboard-sidebar"
+           hx-swap="outerHTML"
+           hx-push-url="true">
             <span class="w-2 h-2 rounded-full bg-primary"></span>
             {{ db.name }}
         </a>
@@ -18,7 +24,6 @@
     </div>
     <div class="flex-none flex items-center gap-2">
         <a
-            href="{% url 'database-create' %}"
             hx-get="{% url 'database-create' %}"
             hx-target="#dashboard-content"
             hx-select="#dashboard-content"

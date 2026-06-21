@@ -1,0 +1,142 @@
+<div id="query-panel" class="card surface-elevated-strong rounded-2xl">
+    <div class="card-body space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="card-title text-lg font-bold">SQL Editor</h2>
+            <span class="text-xs text-base-content/50">Dialect: {{ provider_label }}</span>
+        </div>
+
+        <form class="sql-editor-host space-y-3" onsubmit="return false;">
+            {% csrf_token %}
+            <input type="hidden" name="provider" id="sql-provider" value="{{ database.provider }}">
+            <textarea
+                id="sql-editor"
+                name="query"
+                class="textarea textarea-bordered w-full font-mono text-sm"
+                rows="8"
+                spellcheck="false"
+            >{{ query }}</textarea>
+
+            <div class="flex justify-end">
+                <button type="button"
+                        class="btn btn-primary"
+                        hx-post="{% url 'database-run-query' database.public_id %}"
+                        hx-include="closest form"
+                        hx-target="#query-results"
+                        hx-swap="innerHTML">
+                    Run Query
+                </button>
+            </div>
+        </form>
+
+        {{ schema_json|json_script:"schema" }}
+
+        <div id="query-results">
+            {% include "Databases/partials/query_results.html" %}
+        </div>
+    </div>
+</div>
+
+<script>
+    (async function () {
+        const textarea = document.getElementById("sql-editor");
+        if (!textarea) return;
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== "") {
+                const cookies = document.cookie.split(";");
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const schemaScript = document.getElementById("schema");
+        let schema = {};
+        try {
+            schema = JSON.parse(schemaScript ? schemaScript.textContent : "{}");
+        } catch (e) {
+            schema = {};
+        }
+
+        function attachLinter(container, EditorView, linter, sqlExtension) {
+            async function sqlLinter(view) {
+                const query = view.state.doc.toString();
+                const provider = document.getElementById("sql-provider").value;
+                const csrfToken = getCookie("csrftoken");
+                try {
+                    const response = await fetch("{% url 'database-lint-sql' %}", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded",
+                            "X-CSRFToken": csrfToken,
+                        },
+                        body: new URLSearchParams({ query, provider }),
+                    });
+                    if (!response.ok) return [];
+                    const data = await response.json();
+                    return (data.diagnostics || []).map((d) => {
+                        const totalLines = view.state.doc.lines;
+                        const lineNumber = Math.min(Math.max(d.line || 1, 1), totalLines);
+                        const line = view.state.doc.line(lineNumber);
+                        const col = Math.max((d.col || 1) - 1, 0);
+                        const from = Math.min(line.from + col, line.to);
+                        const to = Math.min(from + 1, line.to);
+                        return { from, to, message: d.message || "Syntax error", severity: "error" };
+                    });
+                } catch (err) {
+                    return [];
+                }
+            }
+            try {
+                new EditorView({
+                    doc: textarea.value,
+                    extensions: [
+                        sqlExtension,
+                        linter(sqlLinter, { delay: 500 }),
+                        EditorView.updateListener.of((update) => {
+                            if (update.docChanged) {
+                                textarea.value = update.state.doc.toString();
+                            }
+                        }),
+                        EditorView.theme({ "&": { height: "220px" }, ".cm-scroller": { overflow: "auto" } }),
+                    ],
+                    parent: container,
+                });
+                textarea.classList.add("hidden");
+            } catch (err) {
+                container.remove();
+                textarea.classList.remove("hidden");
+                const note = document.createElement("p");
+                note.className = "text-xs text-base-content/50";
+                note.textContent = "Rich editor unavailable — raw editor shown below.";
+                textarea.parentNode.insertBefore(note, textarea);
+            }
+        }
+
+        try {
+            const editorContainer = document.createElement("div");
+            editorContainer.className = "codemirror-editor border border-base-300 rounded-lg overflow-hidden";
+            textarea.parentNode.insertBefore(editorContainer, textarea.nextSibling);
+
+            const { EditorView, basicSetup } = await import("https://esm.sh/codemirror@6.0.1");
+            const { sql } = await import("https://esm.sh/@codemirror/lang-sql@6.7.1");
+            const { linter } = await import("https://esm.sh/@codemirror/lint@6.8.1");
+
+            attachLinter(editorContainer, EditorView, linter, sql({ schema, upperCaseKeywords: true }));
+        } catch (err) {
+            const editorContainer = document.querySelector(".codemirror-editor");
+            if (editorContainer) editorContainer.remove();
+            textarea.classList.remove("hidden");
+            const note = document.createElement("p");
+            note.className = "text-xs text-base-content/50";
+            note.textContent = "Rich editor unavailable — raw editor shown below.";
+            textarea.parentNode.insertBefore(note, textarea);
+        }
+    })();
+</script>

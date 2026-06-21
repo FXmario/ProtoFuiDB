@@ -14,6 +14,8 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib.auth.views import (
     LogoutView,
     PasswordChangeDoneView,
@@ -31,3 +33,6 @@ urlpatterns = [
     path('accounts/password-change/', PasswordChangeView.as_view(), name='password_change'),
     path('accounts/password-change/done/', PasswordChangeDoneView.as_view(), name='password_change_done'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

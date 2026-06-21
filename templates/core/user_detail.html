@@ -7,13 +7,15 @@
 {% endblock %}
 
 {% block dashboard_content %}
-<div class="max-w-2xl mx-auto animate-slide-up">
+<div id="dashboard-content" class="max-w-2xl mx-auto animate-slide-up">
     <div class="mb-4">
         <a
-            href="{% url 'index' %}"
             hx-get="{% url 'index' %}"
-            hx-target="#main-content"
-            hx-select="#main-content"
+            hx-target="#dashboard-content"
+            hx-select="#dashboard-content"
+            hx-select-oob="#dashboard-sidebar"
+            hx-swap="outerHTML"
+            hx-push-url="true"
             class="btn btn-ghost btn-sm"
         >← Back to Dashboard</a>
     </div>

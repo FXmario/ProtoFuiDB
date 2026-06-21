@@ -1,0 +1,16 @@
+{% for message in messages %}
+<div class="alert
+    {% if 'success' in message.tags %}alert-success
+    {% elif 'error' in message.tags %}alert-error
+    {% elif 'warning' in message.tags %}alert-warning
+    {% else %}alert-info{% endif %} shadow-lg animate-slide-up">
+    <span>{{ message }}</span>
+    <button class="btn btn-ghost btn-xs" onclick="this.closest('.alert').remove()">✕</button>
+</div>
+{% endfor %}
+<script>
+    setTimeout(function () {
+        var toasts = document.querySelectorAll('#toast-container .alert');
+        toasts.forEach(function (t) { t.remove(); });
+    }, 4000);
+</script>

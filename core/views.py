@@ -57,7 +57,7 @@ def index(request):
         return redirect(reverse("register-superuser"))
     if not request.user.is_authenticated:
         return redirect(reverse("login"))
-    databases = Database.objects.all()
+    databases = Database.objects.filter(owner=request.user)
     return render(request, "Databases/dashboard_index.html", {"databases": databases})
 
 

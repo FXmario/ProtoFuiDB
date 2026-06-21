@@ -9,29 +9,55 @@
 {% block dashboard_content %}
 <div id="dashboard-content" class="max-w-6xl mx-auto animate-slide-up">
     {% if databases %}
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold tracking-tight">Database Dashboard</h1>
-        <p class="text-base-content/70 mt-1">
-            Select a database from the top tabs and a table from the sidebar.
-        </p>
+    <div class="mb-8 flex items-end justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight">Database Dashboard</h1>
+            <p class="text-base-content/70 mt-1">
+                Select a database to explore its tables and run queries.
+            </p>
+        </div>
+        <a
+            hx-get="{% url 'database-create' %}"
+            hx-target="#dashboard-content"
+            hx-select="#dashboard-content"
+            hx-select-oob="#dashboard-sidebar"
+            hx-swap="outerHTML"
+            hx-push-url="true"
+            class="btn btn-primary"
+        >Add Database</a>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-        <div class="stat card-hover surface-elevated-strong rounded-2xl">
-            <div class="stat-title text-base-content/60">Tables</div>
-            <div class="stat-value text-primary">4</div>
-            <div class="stat-desc">Across all databases</div>
-        </div>
-        <div class="stat card-hover surface-elevated-strong rounded-2xl">
-            <div class="stat-title text-base-content/60">Records</div>
-            <div class="stat-value text-secondary">1,234</div>
-            <div class="stat-desc">Total rows tracked</div>
-        </div>
-        <div class="stat card-hover surface-elevated-strong rounded-2xl">
-            <div class="stat-title text-base-content/60">Databases</div>
-            <div class="stat-value text-accent">{{ databases|length }}</div>
-            <div class="stat-desc">Active connections</div>
-        </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+        {% for db in databases %}
+        <a
+            hx-get="{% url 'database-detail' db.public_id %}"
+            hx-target="#dashboard-content"
+            hx-select="#dashboard-content"
+            hx-select-oob="#dashboard-sidebar"
+            hx-swap="outerHTML"
+            hx-push-url="true"
+            class="card card-hover surface-elevated-strong rounded-2xl group"
+        >
+            <div class="card-body">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-5 h-5 stroke-current" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="card-title text-lg font-bold group-hover:text-primary transition-colors">{{ db.name }}</h2>
+                            <p class="text-sm text-base-content/60">{{ db.get_provider_display }}</p>
+                        </div>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-5 h-5 stroke-base-content/40 group-hover:stroke-primary transition-colors" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
     </div>
 
     <div class="card card-hover surface-elevated-strong rounded-2xl">
@@ -52,10 +78,12 @@
             Get started by connecting your first database. You can add PostgreSQL, MariaDB/MySQL, or SQLite3.
         </p>
         <a
-            href="{% url 'database-create' %}"
             hx-get="{% url 'database-create' %}"
             hx-target="#dashboard-content"
             hx-select="#dashboard-content"
+            hx-select-oob="#dashboard-sidebar"
+            hx-swap="outerHTML"
+            hx-push-url="true"
             class="btn btn-primary"
         >Add Database</a>
     </div>

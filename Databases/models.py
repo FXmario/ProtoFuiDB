@@ -1,6 +1,8 @@
-from django.contrib.auth.hashers import check_password, make_password
+from django.conf import settings
 from django.db import models
+
 from core.models import AbstractModel
+from Databases.crypto import decrypt, encrypt
 
 
 def database_file_upload_path(instance, filename):
@@ -17,6 +19,15 @@ class Database(AbstractModel):
         (SQLITE3, "SQLite3"),
     ]
 
+    SQLGLOT_DIALECTS = {
+        POSTGRESQL: "postgres",
+        MARIADB_MYSQL: "mysql",
+        SQLITE3: "sqlite",
+    }
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True
+    )
     name = models.CharField(db_index=True, max_length=255)
     db_name = models.CharField(db_index=True, max_length=255, default="")
     user = models.CharField(db_index=True, max_length=255, blank=True, default="")
@@ -36,7 +47,10 @@ class Database(AbstractModel):
     )
 
     def set_password(self, raw_password):
-        self.password = make_password(raw_password)
+        self.password = encrypt(raw_password)
 
     def check_password(self, raw_password):
-        return check_password(raw_password, self.password)
+        try:
+            return raw_password == decrypt(self.password)
+        except Exception:
+            return False

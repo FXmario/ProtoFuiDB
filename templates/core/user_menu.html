@@ -13,17 +13,22 @@
     <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
         <li>
             <a
-                href="{% url 'user-detail' %}"
                 hx-get="{% url 'user-detail' %}"
-                hx-target="#main-content"
-                hx-select="#main-content"
+                hx-target="#dashboard-content"
+                hx-select="#dashboard-content"
+                hx-select-oob="#dashboard-sidebar"
+                hx-swap="outerHTML"
+                hx-push-url="true"
             >User Detail</a>
         </li>
         <li>
-            <a href="{% url 'database-create' %}"
+            <a
                 hx-get="{% url 'database-create' %}"
                 hx-target="#dashboard-content"
                 hx-select="#dashboard-content"
+                hx-select-oob="#dashboard-sidebar"
+                hx-swap="outerHTML"
+                hx-push-url="true"
             >Add Database</a>
         </li>
         <li>

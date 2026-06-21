@@ -18,4 +18,6 @@ dependencies = [
     "pytest-django>=4.12.0",
     "python-dotenv>=1.2.2",
     "questionary>=2.1.1",
+    "sqlglot>=25.0.0",
+    "cryptography>=42.0.0",
 ]
