@@ -7,7 +7,7 @@ from django.core.files import File
 from django.urls import reverse
 
 from Databases.models import Database
-from Databases.utils import check_db_connection, DatabaseQueryError, list_tables, run_query, get_primary_key, update_cell
+from Databases.utils import check_db_connection, DatabaseQueryError, list_tables, run_query, get_primary_key, update_cell, quote_identifier
 
 User = get_user_model()
 
@@ -969,3 +969,87 @@ def test_database_detail_includes_sort_headers(client, sqlite_database):
     content = response.content.decode()
     assert "/sort" in content
     assert "sort=" in content
+
+
+# ---------------------------------------------------------------------------
+# Provider-aware identifier quoting tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_quote_identifier_sqlite_uses_double_quotes():
+    db = Database(provider=Database.SQLITE3)
+    assert quote_identifier(db, "my_table") == '"my_table"'
+    assert quote_identifier(db, 'has"quote') == '"has""quote"'
+
+
+@pytest.mark.django_db
+def test_quote_identifier_postgres_uses_double_quotes():
+    db = Database(provider=Database.POSTGRESQL)
+    assert quote_identifier(db, "my_table") == '"my_table"'
+    assert quote_identifier(db, 'has"quote') == '"has""quote"'
+
+
+@pytest.mark.django_db
+def test_quote_identifier_mysql_uses_backticks():
+    db = Database(provider=Database.MARIADB_MYSQL)
+    assert quote_identifier(db, "my_table") == '`my_table`'
+    assert quote_identifier(db, "has`tick") == '`has``tick`'
+
+
+# ---------------------------------------------------------------------------
+# MariaDB database_detail uses backtick-quoted queries
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures("mock_db_drivers")
+def test_database_detail_mysql_uses_backtick_quoting(client):
+    _mock_MySQLdb.connect.reset_mock()
+
+    call_count = [0]
+    mock_cursor = MagicMock()
+
+    def fake_execute(query, *args, **kwargs):
+        call_count[0] += 1
+        if "SHOW TABLES" in query:
+            mock_cursor.fetchall.return_value = [("users",)]
+            mock_cursor.description = None
+        elif "SHOW COLUMNS" in query:
+            mock_cursor.fetchall.return_value = [
+                ("id", "int(11)", "NO", "PRI", None, ""),
+                ("name", "varchar(255)", "YES", "", None, ""),
+            ]
+        elif "SELECT * FROM" in query and "LIMIT 100" in query:
+            mock_cursor.description = [("id",), ("name",)]
+            mock_cursor.fetchall.return_value = [(1, "Alice")]
+        else:
+            mock_cursor.fetchall.return_value = []
+            mock_cursor.description = None
+
+    mock_cursor.execute.side_effect = fake_execute
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+    _mock_MySQLdb.connect.return_value = mock_conn
+
+    user = User.objects.create_superuser(username="mysql_admin", password="testpass123")
+    client.force_login(user)
+    db = Database.objects.create(
+        name="mysql_db",
+        provider=Database.MARIADB_MYSQL,
+        db_name="testdb",
+        user="u",
+        host="h",
+        port=3306,
+        owner=user,
+    )
+    db.set_password("p")
+    db.save()
+
+    response = client.get(reverse("database-detail", kwargs={"public_id": db.public_id}))
+    assert response.status_code == 200
+
+    content = response.content.decode()
+    assert "`users`" in content
+    assert "SELECT * FROM `users`" in content
+    assert "SELECT * FROM \"users\"" not in content

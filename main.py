@@ -1,7 +1,7 @@
 import getpass
 from pathlib import Path
 from zoneinfo import available_timezones
-
+import subprocess
 import questionary
 
 
@@ -41,6 +41,7 @@ def main(base_dir: Path | None = None) -> None:
         env_file.write(f"TZ={time_zone}\n")
 
     print("Your .env configuration has been completed")
+    subprocess.run(["uv run manage.py migrate"], shell=True)
 
 
 if __name__ == "__main__":

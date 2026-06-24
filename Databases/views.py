@@ -15,16 +15,13 @@ from Databases.utils import (
     get_primary_key,
     lint_sql,
     list_tables,
+    quote_identifier,
     run_query,
     update_cell,
     UnsupportedProviderError,
 )
 
 SQLITE3 = Database.SQLITE3
-
-
-def _quote_identifier(name: str) -> str:
-    return '"' + name.replace('"', '""') + '"'
 
 
 def _get_database_or_404(request: HttpRequest, public_id: str) -> Database:
@@ -144,7 +141,7 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
     if active_table:
         if active_table in context["tables"]:
             try:
-                query = f"SELECT * FROM {_quote_identifier(active_table)} LIMIT 100"
+                query = f"SELECT * FROM {quote_identifier(database, active_table)} LIMIT 100"
                 columns, rows = run_query(database, query)
                 context["query"] = query
                 context["columns"] = columns
@@ -156,7 +153,7 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
                 context["sort_column"] = ""
                 context["sort_dir"] = "asc"
             except (DatabaseQueryError, UnsupportedProviderError) as e:
-                context["query"] = f"SELECT * FROM {_quote_identifier(active_table)} LIMIT 100"
+                context["query"] = f"SELECT * FROM {quote_identifier(database, active_table)} LIMIT 100"
                 context["columns"] = []
                 context["rows"] = []
                 context["error"] = str(e)
@@ -198,11 +195,11 @@ def table_query(request: HttpRequest, public_id: str, table_name: str) -> HttpRe
         if table_name not in tables:
             return HttpResponse(f"Table {table_name!r} does not exist.", status=404)
 
-        query = f"SELECT * FROM {_quote_identifier(table_name)} LIMIT 100"
+        query = f"SELECT * FROM {quote_identifier(database, table_name)} LIMIT 100"
         columns, rows = run_query(database, query)
         error = None
     except (DatabaseQueryError, UnsupportedProviderError) as e:
-        query = f"SELECT * FROM {_quote_identifier(table_name)} LIMIT 100"
+        query = f"SELECT * FROM {quote_identifier(database, table_name)} LIMIT 100"
         columns, rows = [], []
         error = str(e)
 
@@ -274,13 +271,13 @@ def table_sort_view(request: HttpRequest, public_id: str, table_name: str) -> Ht
 
         order_clause = ""
         if sort_column:
-            order_clause = f" ORDER BY {_quote_identifier(sort_column)} {sort_dir.upper()}"
+            order_clause = f" ORDER BY {quote_identifier(database, sort_column)} {sort_dir.upper()}"
 
-        query = f"SELECT * FROM {_quote_identifier(table_name)}{order_clause} LIMIT 100"
+        query = f"SELECT * FROM {quote_identifier(database, table_name)}{order_clause} LIMIT 100"
         columns, rows = run_query(database, query)
         error = None
     except (DatabaseQueryError, UnsupportedProviderError) as e:
-        query = f"SELECT * FROM {_quote_identifier(table_name)} LIMIT 100"
+        query = f"SELECT * FROM {quote_identifier(database, table_name)} LIMIT 100"
         columns, rows = [], []
         error = str(e)
 

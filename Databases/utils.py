@@ -210,7 +210,7 @@ def run_query(database: Database, query: str) -> tuple[list[str], list[tuple[Any
         conn.close()
 
 
-def _quote_identifier(database: Database, name: str) -> str:
+def quote_identifier(database: Database, name: str) -> str:
     """Quote an identifier according to the database provider."""
     if database.provider == Database.MARIADB_MYSQL:
         return _quote_mysql_identifier(name)
@@ -277,9 +277,9 @@ def update_cell(
     tables = list_tables(database)
     _validate_table_name(database, table_name, tables)
 
-    table_q = _quote_identifier(database, table_name)
-    column_q = _quote_identifier(database, column)
-    pk_q = _quote_identifier(database, pk_column)
+    table_q = quote_identifier(database, table_name)
+    column_q = quote_identifier(database, column)
+    pk_q = quote_identifier(database, pk_column)
 
     conn = open_connection(database)
     try:

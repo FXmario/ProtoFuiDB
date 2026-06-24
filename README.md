@@ -7,11 +7,6 @@ uv sync
 
 ## Generate .env file
 ```bash
-uv run manage.py
+uv run main.py
 ```
 Follow the instruction
-
-## Migrate all the database
-```shell
-uv run manage.py migrate
-```
