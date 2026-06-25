@@ -31,34 +31,9 @@
             {% endif %}
         </h3>
 
-        {% if database %}
-            {% if error %}
-                <div class="px-3 py-2 text-sm text-error">
-                    {{ error }}
-                </div>
-            {% elif tables %}
-                <ul class="space-y-1">
-                    {% for table in tables %}
-                    <li>
-                        <a class="rounded-lg {% if active_table == table %}active{% endif %}"
-                           hx-get="{% url 'database-detail' database.public_id %}?table={{ table|urlencode }}"
-                           hx-target="#dashboard-content"
-                           hx-select="#dashboard-content"
-                           hx-select-oob="#dashboard-sidebar"
-                           hx-swap="outerHTML"
-                           hx-push-url="true">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-4 h-4 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                            {{ table }}
-                        </a>
-                    </li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p class="px-3 text-sm text-base-content/60">No tables found.</p>
-            {% endif %}
-        {% else %}
-            <p class="px-3 text-sm text-base-content/60">Select a database to see its tables.</p>
-        {% endif %}
+        <div id="sidebar-tables">
+            {% include "Databases/partials/sidebar_table_list.html" %}
+        </div>
     </div>
 
     <div class="mt-auto pt-4 border-t border-base-300">

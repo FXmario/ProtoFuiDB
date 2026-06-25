@@ -7,7 +7,7 @@ from django.core.files import File
 from django.urls import reverse
 
 from Databases.models import Database
-from Databases.utils import check_db_connection, DatabaseQueryError, list_tables, run_query, get_primary_key, update_cell, quote_identifier
+from Databases.utils import check_db_connection, DatabaseQueryError, list_tables, run_query, get_primary_key, update_cell, quote_identifier, count_rows
 
 User = get_user_model()
 
@@ -972,6 +972,159 @@ def test_database_detail_includes_sort_headers(client, sqlite_database):
 
 
 # ---------------------------------------------------------------------------
+# Sidebar pagination + search tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sqlite_database_many_tables(settings, tmp_path, client):
+    user = User.objects.create_superuser(username="tables_admin", password="testpass123")
+    client.force_login(user)
+    settings.MEDIA_ROOT = str(tmp_path)
+
+    db_file = tmp_path / "many_tables.db"
+    conn = sqlite3.connect(str(db_file))
+    for i in range(15):
+        conn.execute(f"CREATE TABLE table_{i:02d} (id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+
+    db = Database.objects.create(name="many_tables", provider=Database.SQLITE3, owner=user)
+    with open(db_file, "rb") as f:
+        db.file.save("many_tables.db", File(f))
+    db.refresh_from_db()
+    return db
+
+
+@pytest.mark.django_db
+def test_sidebar_tables_pagination(client, sqlite_database_many_tables):
+    response = client.get(
+        reverse("sidebar-tables", kwargs={"public_id": sqlite_database_many_tables.public_id})
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "table_00" in content
+    assert "table_09" in content
+    assert "table_10" not in content
+    assert "Page 1 of 2" in content
+
+    response = client.get(
+        reverse("sidebar-tables", kwargs={"public_id": sqlite_database_many_tables.public_id}),
+        {"page": 2},
+    )
+    content = response.content.decode()
+    assert "table_10" in content
+    assert "table_14" in content
+    assert "table_00" not in content
+    assert "Page 2 of 2" in content
+
+
+@pytest.mark.django_db
+def test_sidebar_tables_search(client, sqlite_database_many_tables):
+    response = client.get(
+        reverse("sidebar-tables", kwargs={"public_id": sqlite_database_many_tables.public_id}),
+        {"q": "table_01"},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "table_01" in content
+    assert "table_00" not in content
+    assert "table_02" not in content
+
+
+@pytest.mark.django_db
+def test_sidebar_tables_requires_login(client, sqlite_database_many_tables):
+    from django.test import Client
+    unauth_client = Client()
+    response = unauth_client.get(
+        reverse("sidebar-tables", kwargs={"public_id": sqlite_database_many_tables.public_id})
+    )
+    assert response.status_code == 302
+
+
+# ---------------------------------------------------------------------------
+# Records pagination + resize/page-size tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sqlite_database_many_rows(settings, tmp_path, client):
+    user = User.objects.create_superuser(username="rows_admin", password="testpass123")
+    client.force_login(user)
+    settings.MEDIA_ROOT = str(tmp_path)
+
+    db_file = tmp_path / "many_rows.db"
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("CREATE TABLE big_table (id INTEGER PRIMARY KEY, value TEXT)")
+    conn.executemany(
+        "INSERT INTO big_table (value) VALUES (?)",
+        [(f"value_{i}",) for i in range(60)],
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database.objects.create(name="many_rows", provider=Database.SQLITE3, owner=user)
+    with open(db_file, "rb") as f:
+        db.file.save("many_rows.db", File(f))
+    db.refresh_from_db()
+    return db
+
+
+@pytest.mark.django_db
+def test_database_detail_paginates_records(client, sqlite_database_many_rows):
+    response = client.get(
+        reverse("database-detail", kwargs={"public_id": sqlite_database_many_rows.public_id})
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "value_0" in content
+    assert "value_24" in content
+    assert "value_25" not in content
+    assert "LIMIT 25" in content
+    assert "Page 1 of 3" in content
+    assert "resize-y" in content
+
+
+@pytest.mark.django_db
+def test_table_sort_view_pagination(client, sqlite_database_many_rows):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database_many_rows.public_id, "table_name": "big_table"},
+        ),
+        {"page": 2},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "value_25" in content
+    assert "value_49" in content
+    assert "value_50" not in content
+    assert "value_0" not in content
+    assert "Page 2 of 3" in content
+
+
+@pytest.mark.django_db
+def test_table_sort_view_per_page(client, sqlite_database_many_rows):
+    response = client.get(
+        reverse(
+            "table-sort",
+            kwargs={"public_id": sqlite_database_many_rows.public_id, "table_name": "big_table"},
+        ),
+        {"per_page": 50},
+    )
+    content = response.content.decode()
+    assert "value_0" in content
+    assert "value_49" in content
+    assert "value_50" not in content
+    assert "Page 1 of 2" in content
+
+
+@pytest.mark.django_db
+def test_count_rows(sqlite_database_many_rows):
+    assert count_rows(sqlite_database_many_rows, "big_table") == 60
+
+
+# ---------------------------------------------------------------------------
 # Provider-aware identifier quoting tests
 # ---------------------------------------------------------------------------
 
@@ -1020,9 +1173,11 @@ def test_database_detail_mysql_uses_backtick_quoting(client):
                 ("id", "int(11)", "NO", "PRI", None, ""),
                 ("name", "varchar(255)", "YES", "", None, ""),
             ]
-        elif "SELECT * FROM" in query and "LIMIT 100" in query:
+        elif "SELECT * FROM" in query and ("LIMIT 25" in query or "LIMIT 50" in query or "LIMIT 100" in query):
             mock_cursor.description = [("id",), ("name",)]
             mock_cursor.fetchall.return_value = [(1, "Alice")]
+        elif "SELECT COUNT(*)" in query:
+            mock_cursor.fetchone.return_value = (1,)
         else:
             mock_cursor.fetchall.return_value = []
             mock_cursor.description = None
@@ -1052,4 +1207,5 @@ def test_database_detail_mysql_uses_backtick_quoting(client):
     content = response.content.decode()
     assert "`users`" in content
     assert "SELECT * FROM `users`" in content
+    assert "LIMIT 25" in content
     assert "SELECT * FROM \"users\"" not in content

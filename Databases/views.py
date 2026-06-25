@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -15,8 +16,10 @@ from Databases.utils import (
     get_primary_key,
     lint_sql,
     list_tables,
+    open_connection,
     quote_identifier,
     run_query,
+    run_query_with_params,
     update_cell,
     UnsupportedProviderError,
 )
@@ -28,6 +31,10 @@ def _get_database_or_404(request: HttpRequest, public_id: str) -> Database:
     return get_object_or_404(Database, public_id=public_id, owner=request.user)
 
 
+TABLES_PER_PAGE = 10
+DEFAULT_RECORDS_PER_PAGE = 25
+
+
 def _build_schema(database: Database) -> dict[str, list[str]]:
     try:
         return {
@@ -36,6 +43,69 @@ def _build_schema(database: Database) -> dict[str, list[str]]:
         }
     except Exception:
         return {}
+
+
+def _paginate_tables(all_tables: list[str], page: int, q: str) -> tuple[list[str], int, int]:
+    """Return (paginated_tables, page, total_pages) for the sidebar list."""
+    filtered = [t for t in all_tables if q.lower() in t.lower()] if q else all_tables
+    total_pages = max(1, (len(filtered) + TABLES_PER_PAGE - 1) // TABLES_PER_PAGE)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * TABLES_PER_PAGE
+    return filtered[start : start + TABLES_PER_PAGE], page, total_pages
+
+
+def _parse_records_pagination(request: HttpRequest) -> tuple[int, int]:
+    """Return (page, per_page) from query params with safe defaults."""
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per_page = max(1, int(request.GET.get("per_page", DEFAULT_RECORDS_PER_PAGE)))
+    except (TypeError, ValueError):
+        per_page = DEFAULT_RECORDS_PER_PAGE
+    if per_page not in (25, 50, 100, 200):
+        per_page = DEFAULT_RECORDS_PER_PAGE
+    return page, per_page
+
+
+def _build_search_clause(database: Database, columns: list[str], q: str) -> tuple[str, list[Any]]:
+    """Return a (WHERE clause string, params list) for a keyword search across columns."""
+    if not q or not columns:
+        return "", []
+    pattern = f"%{q}%"
+    conditions = []
+    params = []
+    for col in columns:
+        col_q = quote_identifier(database, col)
+        if database.provider == Database.POSTGRESQL:
+            conditions.append(f"CAST({col_q} AS TEXT) ILIKE %s")
+        elif database.provider == Database.MARIADB_MYSQL:
+            conditions.append(f"CAST({col_q} AS CHAR) LIKE %s")
+        else:
+            conditions.append(f"CAST({col_q} AS TEXT) LIKE %s")
+        params.append(pattern)
+    return " WHERE " + " OR ".join(conditions), params
+
+
+def _count_filtered_rows(database: Database, table_name: str, columns: list[str], q: str) -> int:
+    """Return total rows matching the search filter."""
+    where_clause, params = _build_search_clause(database, columns, q)
+    conn = open_connection(database)
+    try:
+        cursor = conn.cursor()
+        query = f"SELECT COUNT(*) FROM {quote_identifier(database, table_name)}{where_clause}"
+        if database.provider == Database.POSTGRESQL:
+            cursor.execute(query, params)
+        elif database.provider == Database.MARIADB_MYSQL:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query, params)
+        return cursor.fetchone()[0]
+    except Exception as e:
+        raise DatabaseQueryError(str(e)) from e
+    finally:
+        conn.close()
 
 
 @login_required
@@ -113,6 +183,23 @@ def check_db_connection_view(request: HttpRequest) -> HttpResponse:
     return render(request, "Databases/partials/toast_messages.html", {"messages": messages.get_messages(request)})
 
 
+def _sidebar_pagination_context(request: HttpRequest, all_tables: list[str]) -> dict:
+    """Return pagination context for the sidebar table list."""
+    q = request.GET.get("q", "").strip()
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    page_tables, page, total_pages = _paginate_tables(all_tables, page, q)
+    return {
+        "all_tables": all_tables,
+        "sidebar_tables": page_tables,
+        "sidebar_page": page,
+        "sidebar_total_pages": total_pages,
+        "sidebar_q": q,
+    }
+
+
 @login_required
 def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
     database = _get_database_or_404(request, public_id)
@@ -122,27 +209,38 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
     }
 
     try:
-        context["tables"] = list_tables(database)
+        all_tables = list_tables(database)
+        context["tables"] = all_tables
         context["schema_json"] = json.dumps(_build_schema(database))
         context["error"] = None
         if database.status != Database.CONNECTED:
             database.status = Database.CONNECTED
             database.save(update_fields=["status"])
     except (DatabaseQueryError, UnsupportedProviderError) as e:
+        all_tables = []
         context["tables"] = []
         context["schema_json"] = "{}"
         context["error"] = str(e)
         if database.status != Database.DISCONNECTED:
             database.status = Database.DISCONNECTED
             database.save(update_fields=["status"])
+        context.update(_sidebar_pagination_context(request, all_tables))
         return render(request, "Databases/database_detail.html", context)
 
-    active_table = request.GET.get("table", "") or (context["tables"][0] if context["tables"] else "")
+    context.update(_sidebar_pagination_context(request, all_tables))
+
+    active_table = request.GET.get("table", "") or (all_tables[0] if all_tables else "")
+    record_page, record_per_page = _parse_records_pagination(request)
+    search_q = request.GET.get("q", "").strip()
     if active_table:
-        if active_table in context["tables"]:
+        if active_table in all_tables:
             try:
-                query = f"SELECT * FROM {quote_identifier(database, active_table)} LIMIT 100"
-                columns, rows = run_query(database, query)
+                offset = (record_page - 1) * record_per_page
+                column_names = [c[0] for c in get_columns(database, active_table)]
+                where_clause, search_params = _build_search_clause(database, column_names, search_q)
+                query = f"SELECT * FROM {quote_identifier(database, active_table)}{where_clause} LIMIT {record_per_page} OFFSET {offset}"
+                columns, rows = run_query_with_params(database, query, search_params)
+                total_rows = _count_filtered_rows(database, active_table, column_names, search_q)
                 context["query"] = query
                 context["columns"] = columns
                 context["rows"] = rows
@@ -152,8 +250,12 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
                 context["pk_index"] = columns.index(pk_col) if pk_col and pk_col in columns else None
                 context["sort_column"] = ""
                 context["sort_dir"] = "asc"
+                context["record_page"] = record_page
+                context["record_per_page"] = record_per_page
+                context["record_total_pages"] = max(1, (total_rows + record_per_page - 1) // record_per_page)
+                context["search_q"] = search_q
             except (DatabaseQueryError, UnsupportedProviderError) as e:
-                context["query"] = f"SELECT * FROM {quote_identifier(database, active_table)} LIMIT 100"
+                context["query"] = f"SELECT * FROM {quote_identifier(database, active_table)} LIMIT {record_per_page} OFFSET 0"
                 context["columns"] = []
                 context["rows"] = []
                 context["error"] = str(e)
@@ -162,6 +264,10 @@ def database_detail(request: HttpRequest, public_id: str) -> HttpResponse:
                 context["pk_index"] = None
                 context["sort_column"] = ""
                 context["sort_dir"] = "asc"
+                context["record_page"] = record_page
+                context["record_per_page"] = record_per_page
+                context["record_total_pages"] = 1
+                context["search_q"] = search_q
         else:
             context["error"] = f"Table {active_table!r} does not exist."
 
@@ -177,13 +283,39 @@ def database_sidebar(request: HttpRequest, public_id: str) -> HttpResponse:
     }
 
     try:
-        context["tables"] = list_tables(database)
+        all_tables = list_tables(database)
+        context["tables"] = all_tables
         context["error"] = None
     except (DatabaseQueryError, UnsupportedProviderError) as e:
+        all_tables = []
         context["tables"] = []
         context["error"] = str(e)
 
+    context.update(_sidebar_pagination_context(request, all_tables))
     return render(request, "sidebar.html", context)
+
+
+@login_required
+def sidebar_tables(request: HttpRequest, public_id: str) -> HttpResponse:
+    """HTMX endpoint returning just the paginated table list for the sidebar."""
+    database = _get_database_or_404(request, public_id)
+    context = {
+        "database": database,
+        "provider_label": dict(Database.PROVIDER_CHOICES).get(database.provider, database.provider),
+        "active_table": request.GET.get("table", "").strip(),
+    }
+
+    try:
+        all_tables = list_tables(database)
+        context["tables"] = all_tables
+        context["error"] = None
+    except (DatabaseQueryError, UnsupportedProviderError) as e:
+        all_tables = []
+        context["tables"] = []
+        context["error"] = str(e)
+
+    context.update(_sidebar_pagination_context(request, all_tables))
+    return render(request, "Databases/partials/sidebar_table_list.html", context)
 
 
 @login_required
@@ -259,6 +391,8 @@ def table_sort_view(request: HttpRequest, public_id: str, table_name: str) -> Ht
     sort_dir = request.GET.get("dir", "asc").strip().lower()
     if sort_dir not in ("asc", "desc"):
         sort_dir = "asc"
+    record_page, record_per_page = _parse_records_pagination(request)
+    search_q = request.GET.get("q", "").strip()
 
     try:
         tables = list_tables(database)
@@ -273,13 +407,19 @@ def table_sort_view(request: HttpRequest, public_id: str, table_name: str) -> Ht
         if sort_column:
             order_clause = f" ORDER BY {quote_identifier(database, sort_column)} {sort_dir.upper()}"
 
-        query = f"SELECT * FROM {quote_identifier(database, table_name)}{order_clause} LIMIT 100"
-        columns, rows = run_query(database, query)
+        where_clause, search_params = _build_search_clause(database, column_names, search_q)
+        offset = (record_page - 1) * record_per_page
+        query = f"SELECT * FROM {quote_identifier(database, table_name)}{where_clause}{order_clause} LIMIT {record_per_page} OFFSET {offset}"
+        columns, rows = run_query_with_params(database, query, search_params)
+        total_rows = _count_filtered_rows(database, table_name, column_names, search_q)
         error = None
     except (DatabaseQueryError, UnsupportedProviderError) as e:
-        query = f"SELECT * FROM {quote_identifier(database, table_name)} LIMIT 100"
+        query = f"SELECT * FROM {quote_identifier(database, table_name)}{where_clause}{order_clause} LIMIT {record_per_page} OFFSET {offset}"
         columns, rows = [], []
+        total_rows = 0
         error = str(e)
+
+    record_total_pages = max(1, (total_rows + record_per_page - 1) // record_per_page)
 
     pk_col = get_primary_key(database, table_name)
     pk_index = None
@@ -296,8 +436,15 @@ def table_sort_view(request: HttpRequest, public_id: str, table_name: str) -> Ht
         "pk_index": pk_index,
         "sort_column": sort_column,
         "sort_dir": sort_dir,
+        "record_page": record_page,
+        "record_per_page": record_per_page,
+        "record_total_pages": record_total_pages,
+        "search_q": search_q,
     }
-    return render(request, "Databases/partials/query_results.html", context)
+    template = "Databases/partials/query_results.html"
+    if request.GET.get("partial") == "table":
+        template = "Databases/partials/query_results_table.html"
+    return render(request, template, context)
 
 
 @login_required

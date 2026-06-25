@@ -1,0 +1,62 @@
+{% load db_filters %}
+<div class="overflow-x-auto resize-y overflow-y-auto min-h-[200px] max-h-[600px]" id="query-results-table-wrapper">
+    <table class="table table-zebra table-sm w-full" id="query-results-table">
+        <thead class="sticky top-0 bg-base-100">
+            <tr>
+                {% for col in columns %}
+                <th class="font-bold whitespace-nowrap select-none">
+                    {% if active_table %}
+                        <a class="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors"
+                           hx-get="{% url 'table-sort' database.public_id active_table %}?sort={{ col|urlencode }}&dir={% if sort_column == col and sort_dir == 'asc' %}desc{% else %}asc{% endif %}&per_page={{ record_per_page|default:25 }}&q={{ search_q|urlencode }}&partial=table"
+                           hx-target="#query-results-data"
+                           hx-swap="innerHTML">
+                            {{ col }}
+                            {% if sort_column == col %}
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3.5 h-3.5 stroke-current shrink-0 {% if sort_dir == 'asc' %}rotate-180{% endif %} transition-transform"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3.5 h-3.5 stroke-current shrink-0 opacity-30"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path></svg>
+                            {% endif %}
+                        </a>
+                    {% else %}
+                        {{ col }}
+                    {% endif %}
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr {% if pk_column and active_table and pk_index is not None %}data-row-id="{{ row|index:pk_index }}"{% endif %}>
+                {% for cell in row %}
+                <td class="font-mono text-xs editable-cell" data-column="{{ columns|index:forloop.counter0 }}">{{ cell }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if record_total_pages %}
+<div class="px-4 py-2 border-t border-base-300 bg-base-200/30 flex items-center justify-between gap-3">
+    <span class="text-xs text-base-content/50">Page {{ record_page }} of {{ record_total_pages }}</span>
+
+    <div class="join">
+        <button type="button"
+                class="btn btn-sm join-item"
+                hx-get="{% url 'table-sort' database.public_id active_table %}?page={{ record_page|add:'-1' }}&per_page={{ record_per_page }}&sort={{ sort_column|urlencode }}&dir={{ sort_dir|default:'asc' }}&q={{ search_q|urlencode }}&partial=table"
+                hx-target="#query-results-data"
+                hx-swap="innerHTML"
+                {% if record_page <= 1 %}disabled{% endif %}>
+            Prev
+        </button>
+        <button type="button"
+                class="btn btn-sm join-item"
+                hx-get="{% url 'table-sort' database.public_id active_table %}?page={{ record_page|add:'1' }}&per_page={{ record_per_page }}&sort={{ sort_column|urlencode }}&dir={{ sort_dir|default:'asc' }}&q={{ search_q|urlencode }}&partial=table"
+                hx-target="#query-results-data"
+                hx-swap="innerHTML"
+                {% if record_page >= record_total_pages %}disabled{% endif %}>
+            Next
+        </button>
+    </div>
+</div>
+{% endif %}

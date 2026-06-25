@@ -11,143 +11,139 @@
     </div>
 {% elif columns %}
     <div class="px-4 py-2">
-        <div class="flex items-center gap-2 mb-2 text-xs text-base-content/50">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3.5 h-3.5 stroke-current" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m2 2v-4m2 4v-6m2 6v-8M5 9l7-7 7 7M5 9h14M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9"></path></svg>
-            Results
-            <span class="badge badge-sm badge-ghost">{{ rows|length }} row{{ rows|length|pluralize }}</span>
-            {% if pk_column %}
-                <span class="badge badge-sm badge-success badge-soft gap-1" title="Primary key: {{ pk_column }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3"><path d="M12 15v2H8v-2h4m2-6a4 4 0 014 4v1a4 4 0 01-4 4h-2v-2h2a2 2 0 002-2v-1a2 2 0 00-2-2h-8a2 2 0 00-2 2v1a2 2 0 002 2h2v2H6a4 4 0 01-4-4v-1a4 4 0 014-4h8z"/></svg>
-                    Editable
-                </span>
-            {% else %}
-                <span class="badge badge-sm badge-ghost gap-1" title="No primary key detected">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3 h-3 stroke-current" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14L21 3m0 0v6m0-6h-6m-8 18a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                    Read-only
-                </span>
+        <div class="flex items-center justify-between gap-2 mb-2 text-xs text-base-content/50">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3.5 h-3.5 stroke-current" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m2 2v-4m2 4v-6m2 6v-8M5 9l7-7 7 7M5 9h14M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9"></path></svg>
+                Results
+                <span class="badge badge-sm badge-ghost">{{ rows|length }} row{{ rows|length|pluralize }}</span>
+                {% if pk_column %}
+                    <span class="badge badge-sm badge-success badge-soft gap-1" title="Primary key: {{ pk_column }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3"><path d="M12 15v2H8v-2h4m2-6a4 4 0 014 4v1a4 4 0 01-4 4h-2v-2h2a2 2 0 002-2v-1a2 2 0 00-2-2h-8a2 2 0 00-2 2v1a2 2 0 002 2h2v2H6a4 4 0 01-4-4v-1a4 4 0 014-4h8z"/></svg>
+                        Editable
+                    </span>
+                {% else %}
+                    <span class="badge badge-sm badge-ghost gap-1" title="No primary key detected">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3 h-3 stroke-current" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14L21 3m0 0v6m0-6h-6m-8 18a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                        Read-only
+                    </span>
+                {% endif %}
+            </div>
+
+            {% if record_total_pages %}
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-base-content/50">Per page</span>
+                <select class="select select-xs select-bordered"
+                        name="per_page"
+                        hx-get="{% url 'table-sort' database.public_id active_table %}?page=1&sort={{ sort_column|urlencode }}&dir={{ sort_dir|default:'asc' }}&q={{ search_q|urlencode }}&partial=table"
+                        hx-include="this"
+                        hx-target="#query-results-data"
+                        hx-swap="innerHTML">
+                    <option value="25" {% if record_per_page == 25 %}selected{% endif %}>25</option>
+                    <option value="50" {% if record_per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if record_per_page == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if record_per_page == 200 %}selected{% endif %}>200</option>
+                </select>
+            </div>
             {% endif %}
         </div>
     </div>
-    <div class="overflow-x-auto max-h-80 overflow-y-auto">
-        <table class="table table-zebra table-sm w-full" id="query-results-table">
-            <thead class="sticky top-0 bg-base-100">
-                <tr>
-                    {% for col in columns %}
-                    <th class="font-bold whitespace-nowrap select-none">
-                        {% if active_table %}
-                            <a class="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors"
-                               hx-get="{% url 'table-sort' database.public_id active_table %}?sort={{ col|urlencode }}&dir={% if sort_column == col and sort_dir == 'asc' %}desc{% else %}asc{% endif %}"
-                               hx-target="#query-results"
-                               hx-swap="innerHTML">
-                                {{ col }}
-                                {% if sort_column == col %}
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3.5 h-3.5 stroke-current shrink-0 {% if sort_dir == 'asc' %}rotate-180{% endif %} transition-transform"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                                {% else %}
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-3.5 h-3.5 stroke-current shrink-0 opacity-30"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path></svg>
-                                {% endif %}
-                            </a>
-                        {% else %}
-                            {{ col }}
-                        {% endif %}
-                    </th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                <tr {% if pk_column and active_table and pk_index is not None %}data-row-id="{{ row|index:pk_index }}"{% endif %}>
-                    {% for cell in row %}
-                    <td class="font-mono text-xs editable-cell" data-column="{{ columns|index:forloop.counter0 }}">{{ cell }}</td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+
+    {% if active_table %}
+    <div class="px-4 py-2">
+        <input type="text"
+               name="q"
+               value="{{ search_q }}"
+               placeholder="Search {{ active_table }}..."
+               class="input input-sm input-bordered w-full"
+               hx-get="{% url 'table-sort' database.public_id active_table %}?page=1&per_page={{ record_per_page|default:25 }}&sort={{ sort_column|urlencode }}&dir={{ sort_dir|default:'asc' }}&partial=table"
+               hx-target="#query-results-data"
+               hx-swap="innerHTML"
+               hx-trigger="keyup changed delay:300ms"
+               hx-include="this">
     </div>
+    {% endif %}
+
+    <div id="query-results-data">
+        {% include "Databases/partials/query_results_table.html" %}
+    </div>
+
     {% if pk_column and active_table %}
     <script>
         (function () {
-            const table = document.getElementById("query-results-table");
-            if (!table) return;
+            const dataContainer = document.getElementById("query-results-data");
+            if (!dataContainer || dataContainer.dataset.editInitialized === "true") return;
+            dataContainer.dataset.editInitialized = "true";
+
             const dbId = "{{ database.public_id }}";
             const tableName = "{{ active_table }}";
             const editUrl = `/databases/${dbId}/cell-edit/`;
 
-            table.querySelectorAll("tbody td.editable-cell").forEach(function (td) {
-                let originalHTML = null;
-                let inputEl = null;
+            dataContainer.addEventListener("dblclick", function (e) {
+                const td = e.target.closest("td.editable-cell");
+                if (!td || td.querySelector("input")) return;
 
-                td.addEventListener("dblclick", function () {
-                    if (td.querySelector("input")) return;
-                    originalHTML = td.innerHTML;
-                    const currentValue = td.textContent.trim();
-                    const column = td.dataset.column;
-                    const rowId = td.parentElement.dataset.rowId;
+                const originalHTML = td.innerHTML;
+                const currentValue = td.textContent.trim();
+                const column = td.dataset.column;
+                const rowId = td.parentElement?.dataset.rowId;
+                if (!rowId) return;
 
-                    inputEl = document.createElement("input");
-                    inputEl.type = "text";
-                    inputEl.value = currentValue;
-                    inputEl.className = "input input-xs input-bordered w-full font-mono";
-                    inputEl.name = "value";
+                const inputEl = document.createElement("input");
+                inputEl.type = "text";
+                inputEl.value = currentValue;
+                inputEl.className = "input input-xs input-bordered w-full font-mono";
+                inputEl.name = "value";
 
-                    td.innerHTML = "";
-                    td.appendChild(inputEl);
-                    inputEl.focus();
-                    inputEl.select();
+                td.innerHTML = "";
+                td.appendChild(inputEl);
+                inputEl.focus();
+                inputEl.select();
 
-                    function submit() {
-                        const form = document.createElement("form");
-                        form.method = "POST";
+                function submit() {
+                    const form = document.createElement("form");
+                    form.method = "POST";
 
-                        const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || getCookie("csrftoken");
+                    const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || getCookie("csrftoken");
 
-                        function addField(name, val) {
-                            const hidden = document.createElement("input");
-                            hidden.type = "hidden";
-                            hidden.name = name;
-                            hidden.value = val;
-                            form.appendChild(hidden);
-                        }
-
-                        addField("csrfmiddlewaretoken", csrfToken);
-                        addField("table", tableName);
-                        addField("column", column);
-                        addField("row_id", rowId);
-                        addField("value", inputEl.value);
-
-                        form.action = editUrl;
-                        form.setAttribute("hx-post", editUrl);
-                        form.setAttribute("hx-target", "closest td");
-                        form.setAttribute("hx-swap", "outerHTML");
-                        htmx.process(form);
-                        htmx.trigger(form, "submit");
+                    function addField(name, val) {
+                        const hidden = document.createElement("input");
+                        hidden.type = "hidden";
+                        hidden.name = name;
+                        hidden.value = val;
+                        form.appendChild(hidden);
                     }
 
-                    function cancel() {
-                        td.innerHTML = originalHTML;
-                        inputEl = null;
+                    addField("csrfmiddlewaretoken", csrfToken);
+                    addField("table", tableName);
+                    addField("column", column);
+                    addField("row_id", rowId);
+                    addField("value", inputEl.value);
+
+                    form.action = editUrl;
+                    form.setAttribute("hx-post", editUrl);
+                    form.setAttribute("hx-target", "closest td");
+                    form.setAttribute("hx-swap", "outerHTML");
+                    htmx.process(form);
+                    htmx.trigger(form, "submit");
+                }
+
+                function cancel() {
+                    td.innerHTML = originalHTML;
+                }
+
+                inputEl.addEventListener("keydown", function (e) {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        submit();
+                    } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancel();
                     }
-
-                    inputEl.addEventListener("keydown", function (e) {
-                        if (e.key === "Enter") {
-                            e.preventDefault();
-                            submit();
-                        } else if (e.key === "Escape") {
-                            e.preventDefault();
-                            cancel();
-                        }
-                    });
-
-                    inputEl.addEventListener("blur", function (e) {
-                        if (td.querySelector("input")) {
-                            cancel();
-                        }
-                    });
                 });
 
-                td.addEventListener("mouseenter", function () {
-                    if (!td.querySelector("input")) {
-                        td.classList.add("cursor-text");
+                inputEl.addEventListener("blur", function () {
+                    if (td.querySelector("input")) {
+                        cancel();
                     }
                 });
             });

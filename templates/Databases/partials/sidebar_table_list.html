@@ -1,0 +1,63 @@
+{% if not database %}
+    <p class="px-3 text-sm text-base-content/60">Select a database to see its tables.</p>
+{% elif error %}
+    <div class="px-3 py-2 text-sm text-error">
+        {{ error }}
+    </div>
+{% else %}
+    <div class="px-3 mb-2">
+        <input type="text"
+               name="q"
+               value="{{ sidebar_q }}"
+               placeholder="Search tables..."
+               class="input input-sm input-bordered w-full"
+               hx-get="{% url 'sidebar-tables' database.public_id %}"
+               hx-target="#sidebar-tables"
+               hx-swap="outerHTML"
+               hx-trigger="keyup changed delay:300ms"
+               hx-vals='{"page": 1}'>
+    </div>
+
+    {% if sidebar_tables %}
+        <ul class="space-y-1">
+            {% for table in sidebar_tables %}
+            <li>
+                <a class="rounded-lg {% if active_table == table %}active{% endif %}"
+                   hx-get="{% url 'database-detail' database.public_id %}?table={{ table|urlencode }}"
+                   hx-target="#dashboard-content"
+                   hx-select="#dashboard-content"
+                   hx-select-oob="#dashboard-sidebar"
+                   hx-swap="outerHTML"
+                   hx-push-url="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-4 h-4 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    {{ table }}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <div class="px-3 mt-3 flex items-center justify-between text-xs">
+            <span class="text-base-content/50">Page {{ sidebar_page }} of {{ sidebar_total_pages }}</span>
+            <div class="join">
+                <button type="button"
+                        class="btn btn-xs join-item"
+                        hx-get="{% url 'sidebar-tables' database.public_id %}?page={{ sidebar_page|add:'-1' }}&q={{ sidebar_q|urlencode }}"
+                        hx-target="#sidebar-tables"
+                        hx-swap="outerHTML"
+                        {% if sidebar_page <= 1 %}disabled{% endif %}>
+                    Prev
+                </button>
+                <button type="button"
+                        class="btn btn-xs join-item"
+                        hx-get="{% url 'sidebar-tables' database.public_id %}?page={{ sidebar_page|add:'1' }}&q={{ sidebar_q|urlencode }}"
+                        hx-target="#sidebar-tables"
+                        hx-swap="outerHTML"
+                        {% if sidebar_page >= sidebar_total_pages %}disabled{% endif %}>
+                    Next
+                </button>
+            </div>
+        </div>
+    {% else %}
+        <p class="px-3 text-sm text-base-content/60">No tables found.</p>
+    {% endif %}
+{% endif %}

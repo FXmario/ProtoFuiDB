@@ -191,10 +191,20 @@ def run_query(database: Database, query: str) -> tuple[list[str], list[tuple[Any
     For result-set queries, columns are read from cursor.description.
     For DDL/DML, a single-row result [('Rows affected',), (rowcount,)] is returned.
     """
+    return run_query_with_params(database, query, [])
+
+
+def run_query_with_params(
+    database: Database, query: str, params: list[Any]
+) -> tuple[list[str], list[tuple[Any, ...]]]:
+    """Execute parameterized SQL and return (columns, rows)."""
     conn = open_connection(database)
     try:
         cursor = conn.cursor()
-        cursor.execute(query)
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
         if cursor.description:
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
@@ -258,6 +268,22 @@ def get_primary_key(database: Database, table_name: str) -> str | None:
         return None
     except Exception:
         return None
+    finally:
+        conn.close()
+
+
+def count_rows(database: Database, table_name: str) -> int:
+    """Return the total row count for a validated table."""
+    tables = list_tables(database)
+    _validate_table_name(database, table_name, tables)
+
+    conn = open_connection(database)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT COUNT(*) FROM {quote_identifier(database, table_name)}")
+        return cursor.fetchone()[0]
+    except Exception as e:
+        raise DatabaseQueryError(str(e)) from e
     finally:
         conn.close()
 

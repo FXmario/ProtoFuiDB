@@ -9,6 +9,7 @@ urlpatterns = [
     path("check-connection/", views.check_db_connection_view, name="database-check-connection"),
     path("<uuid:public_id>/", views.database_detail, name="database-detail"),
     path("<uuid:public_id>/sidebar/", views.database_sidebar, name="database-sidebar"),
+    path("<uuid:public_id>/sidebar/tables/", views.sidebar_tables, name="sidebar-tables"),
     path("<uuid:public_id>/table/<str:table_name>/", views.table_query, name="table-query"),
     path("<uuid:public_id>/table/<str:table_name>/sort/", views.table_sort_view, name="table-sort"),
     path("<uuid:public_id>/run/", views.run_query_view, name="database-run-query"),
