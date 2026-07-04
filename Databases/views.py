@@ -115,6 +115,14 @@ def dashboard_index(request: HttpRequest) -> HttpResponse:
     return render(request, "Databases/dashboard_index.html", context)
 
 
+def _provider_is_sqlite(form: DatabaseForm) -> bool:
+    if form.is_bound:
+        provider = form.data.get("provider")
+    else:
+        provider = form.initial.get("provider")
+    return provider == SQLITE3
+
+
 @login_required
 def database_create(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
@@ -130,15 +138,19 @@ def database_create(request: HttpRequest) -> HttpResponse:
     else:
         form = DatabaseForm()
 
-    return render(request, "Databases/database_create.html", {"form": form})
+    return render(request, "Databases/database_create.html", {
+        "form": form,
+        "is_sqlite": _provider_is_sqlite(form),
+    })
 
 
 @login_required
 def database_file_field(request: HttpRequest) -> HttpResponse:
     provider = request.GET.get("provider", "")
-    show_file_field = provider == SQLITE3
-    return render(request, "Databases/partials/file_field.html", {
-        "show_file_field": show_file_field,
+    is_sqlite = provider == SQLITE3
+    return render(request, "Databases/partials/provider_fields.html", {
+        "form": DatabaseForm(),
+        "is_sqlite": is_sqlite,
     })
 
 

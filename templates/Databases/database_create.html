@@ -36,7 +36,7 @@
                 {% endif %}
 
                 {% for field in form %}
-                    {% if field.name == "file" %}
+                    {% if field.name == "file" or field.name == "db_name" or field.name == "user" or field.name == "host" or field.name == "port" or field.name == "raw_password" %}
                     {% else %}
                         <div class="form-control w-full">
                             <label class="label" for="{{ field.id_for_label }}">
@@ -55,7 +55,9 @@
                             {% endif %}
                         </div>
                         {% if field.name == "provider" %}
-                        <div id="file-field-container"></div>
+                        <div id="connection-fields-container">
+                            {% include "Databases/partials/provider_fields.html" %}
+                        </div>
                         {% endif %}
                     {% endif %}
                 {% endfor %}

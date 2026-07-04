@@ -39,7 +39,7 @@ class DatabaseForm(forms.ModelForm):
             "provider": forms.Select(attrs={
                 "class": "select select-bordered w-full",
                 "hx-get": "/databases/new/file-field/",
-                "hx-target": "#file-field-container",
+                "hx-target": "#connection-fields-container",
                 "hx-swap": "innerHTML",
                 "hx-trigger": "change",
             }),
