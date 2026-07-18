@@ -78,5 +78,42 @@
             </form>
         </div>
     </div>
+
+    <div class="card surface-elevated-strong rounded-2xl mt-6">
+        <div class="card-body">
+            <h2 class="card-title text-xl font-bold">Import from file</h2>
+            <p class="text-base-content/70 mt-1">
+                Build a new SQLite3 database from a <code>.sql</code> or <code>.json</code> export.
+            </p>
+
+            {% if import_error %}
+                <div class="alert alert-error alert-soft mt-4">
+                    <span>{{ import_error }}</span>
+                </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'database-import' %}" class="w-full space-y-4 mt-4" hx-boost="false" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-control w-full">
+                    <label class="label" for="import-name">
+                        <span class="label-text font-medium">Display name (optional)</span>
+                    </label>
+                    <input type="text" id="import-name" name="name" placeholder="Defaults to the uploaded filename" class="input input-bordered w-full" maxlength="255">
+                </div>
+                <div class="form-control w-full">
+                    <label class="label" for="import-file">
+                        <span class="label-text font-medium">File</span>
+                    </label>
+                    <input type="file" id="import-file" name="file" accept=".sql,.json" class="file-input file-bordered w-full" required>
+                    <label class="label">
+                        <span class="label-text-alt">.sql or .json</span>
+                    </label>
+                </div>
+                <div class="card-actions justify-end">
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 {% endblock %}

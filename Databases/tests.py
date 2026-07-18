@@ -8,6 +8,14 @@ from django.urls import reverse
 
 from Databases.models import Database
 from Databases.utils import check_db_connection, DatabaseQueryError, list_tables, run_query, get_primary_key, update_cell, quote_identifier, count_rows
+from Databases.io import (
+    DatabaseExportError,
+    DatabaseImportError,
+    export_json,
+    export_sql,
+    import_sqlite_from_json,
+    import_sqlite_from_sql,
+)
 
 User = get_user_model()
 
@@ -1209,3 +1217,272 @@ def test_database_detail_mysql_uses_backtick_quoting(client):
     assert "SELECT * FROM `users`" in content
     assert "LIMIT 25" in content
     assert "SELECT * FROM \"users\"" not in content
+
+
+# ---------------------------------------------------------------------------
+# Export / Import tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_export_json_returns_all_tables(sqlite_database):
+    payload = export_json(sqlite_database)
+    assert payload["database"] == "sqlite_test"
+    table_names = [t["name"] for t in payload["tables"]]
+    assert "users" in table_names
+    users_table = next(t for t in payload["tables"] if t["name"] == "users")
+    col_names = [c["name"] for c in users_table["columns"]]
+    assert col_names == ["id", "name"]
+    row_values = [r[1] for r in users_table["rows"]]
+    assert set(row_values) == {"Alice", "Bob"}
+
+
+@pytest.mark.django_db
+def test_export_json_view_returns_json_attachment(client, sqlite_database):
+    response = client.get(
+        reverse("database-export", kwargs={"public_id": sqlite_database.public_id}),
+        {"format": "json"},
+    )
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/json"
+    assert 'attachment; filename="sqlite_test.json"' in response["Content-Disposition"]
+    body = response.json()
+    assert body["database"] == "sqlite_test"
+    assert any(t["name"] == "users" for t in body["tables"])
+
+
+@pytest.mark.django_db
+def test_export_sql_view_for_sqlite(client, sqlite_database):
+    response = client.get(
+        reverse("database-export", kwargs={"public_id": sqlite_database.public_id}),
+        {"format": "sql"},
+    )
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/sql"
+    assert 'attachment; filename="sqlite_test.sql"' in response["Content-Disposition"]
+    body = response.content.decode()
+    assert "CREATE TABLE" in body
+    assert "users" in body
+
+
+@pytest.mark.django_db
+def test_database_export_requires_login(client):
+    db = Database.objects.create(name="x", provider=Database.SQLITE3)
+    response = client.get(reverse("database-export", kwargs={"public_id": db.public_id}))
+    assert response.status_code == 302
+    assert reverse("login") in response.url
+
+
+@pytest.mark.django_db
+def test_database_export_404_for_other_owner(client, sqlite_database):
+    other = User.objects.create_user(username="intruder", password="testpass123")
+    client.force_login(other)
+    response = client.get(
+        reverse("database-export", kwargs={"public_id": sqlite_database.public_id}),
+        {"format": "json"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_database_export_unsupported_format(client, sqlite_database):
+    response = client.get(
+        reverse("database-export", kwargs={"public_id": sqlite_database.public_id}),
+        {"format": "csv"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_database_detail_renders_export_dropdown(client, sqlite_database):
+    response = client.get(
+        reverse("database-detail", kwargs={"public_id": sqlite_database.public_id})
+    )
+    content = response.content.decode()
+    assert "Export" in content
+    assert "?format=sql" in content
+    assert "?format=json" in content
+
+
+def test_import_sqlite_from_sql_creates_table(tmp_path):
+    db_path = tmp_path / "imported.db"
+    sql = """
+    CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT);
+    INSERT INTO items (label) VALUES ('alpha'), ('beta');
+    """
+    import_sqlite_from_sql(str(db_path), sql)
+    conn = sqlite3.connect(str(db_path))
+    rows = conn.execute("SELECT label FROM items ORDER BY id").fetchall()
+    conn.close()
+    assert [r[0] for r in rows] == ["alpha", "beta"]
+
+
+def test_import_sqlite_from_sql_invalid_sql_raises(tmp_path):
+    db_path = tmp_path / "bad.db"
+    with pytest.raises(DatabaseImportError):
+        import_sqlite_from_sql(str(db_path), "THIS IS NOT SQL;")
+    assert not db_path.exists()
+
+
+def test_import_sqlite_from_json_roundtrip(tmp_path):
+    db_path = tmp_path / "rt.db"
+    payload = {
+        "database": "rt",
+        "provider": Database.SQLITE3,
+        "tables": [
+            {
+                "name": "people",
+                "columns": [
+                    {"name": "id", "type": "INTEGER"},
+                    {"name": "name", "type": "TEXT"},
+                ],
+                "rows": [[1, "Alice"], [2, "Bob"]],
+            }
+        ],
+    }
+    import_sqlite_from_json(str(db_path), payload)
+    conn = sqlite3.connect(str(db_path))
+    cols = conn.execute("PRAGMA table_info(people)").fetchall()
+    rows = conn.execute("SELECT id, name FROM people ORDER BY id").fetchall()
+    conn.close()
+    assert [c[1] for c in cols] == ["id", "name"]
+    assert rows == [(1, "Alice"), (2, "Bob")]
+
+
+def test_import_sqlite_from_json_missing_tables_raises(tmp_path):
+    db_path = tmp_path / "bad.db"
+    with pytest.raises(DatabaseImportError):
+        import_sqlite_from_json(str(db_path), {"database": "x"})
+    assert not db_path.exists()
+
+
+@pytest.mark.django_db
+def test_database_import_creates_sqlite_records(settings, tmp_path, client):
+    user = User.objects.create_superuser(username="imp_admin", password="testpass123")
+    client.force_login(user)
+    settings.MEDIA_ROOT = str(tmp_path)
+
+    sql = (
+        "CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT);"
+        "INSERT INTO notes (body) VALUES ('hello'), ('world');"
+    )
+
+    import io as _io
+
+    upload = _io.BytesIO(sql.encode("utf-8"))
+    upload.name = "imp.sql"
+    response = client.post(
+        reverse("database-import"),
+        {"name": "ImportedNotes", "file": upload},
+    )
+    assert response.status_code == 302
+
+    new_db = Database.objects.get(name="ImportedNotes")
+    assert new_db.provider == Database.SQLITE3
+    assert new_db.owner == user
+    assert new_db.file.name  # FileField populated
+    conn = sqlite3.connect(new_db.file.path)
+    rows = conn.execute("SELECT body FROM notes ORDER BY id").fetchall()
+    conn.close()
+    assert [r[0] for r in rows] == ["hello", "world"]
+
+
+@pytest.mark.django_db
+def test_database_import_json_creates_sqlite_record(settings, tmp_path, client):
+    user = User.objects.create_superuser(username="json_admin", password="testpass123")
+    client.force_login(user)
+    settings.MEDIA_ROOT = str(tmp_path)
+
+    import io as _io
+    import json as _json
+
+    payload = {
+        "database": "from_json",
+        "tables": [
+            {
+                "name": "widgets",
+                "columns": [
+                    {"name": "id", "type": "INTEGER"},
+                    {"name": "qty", "type": "INTEGER"},
+                ],
+                "rows": [[1, 10], [2, 20]],
+            }
+        ],
+    }
+    upload = _io.BytesIO(_json.dumps(payload).encode("utf-8"))
+    upload.name = "widgets.json"
+    response = client.post(
+        reverse("database-import"),
+        {"name": "WidgetsImport", "file": upload},
+    )
+    assert response.status_code == 302
+    new_db = Database.objects.get(name="WidgetsImport")
+    assert new_db.provider == Database.SQLITE3
+    conn = sqlite3.connect(new_db.file.path)
+    rows = conn.execute("SELECT id, qty FROM widgets ORDER BY id").fetchall()
+    conn.close()
+    assert rows == [(1, 10), (2, 20)]
+
+
+@pytest.mark.django_db
+def test_database_import_rejects_unsupported_format(client):
+    user = User.objects.create_superuser(username="fmt_admin", password="testpass123")
+    client.force_login(user)
+    import io as _io
+
+    upload = _io.BytesIO(b"hi")
+    upload.name = "evil.csv"
+    response = client.post(reverse("database-import"), {"file": upload})
+    assert response.status_code == 400
+    assert "Only .sql and .json" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_database_import_requires_login(client):
+    import io as _io
+
+    upload = _io.BytesIO(b"CREATE TABLE x (id INTEGER);")
+    upload.name = "x.sql"
+    response = client.post(reverse("database-import"), {"file": upload})
+    assert response.status_code == 302
+    assert reverse("login") in response.url
+
+
+@pytest.mark.django_db
+def test_database_import_missing_file_returns_400(client):
+    user = User.objects.create_superuser(username="nf_admin", password="testpass123")
+    client.force_login(user)
+    response = client.post(reverse("database-import"), {})
+    assert response.status_code == 400
+    assert "No file was uploaded" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_database_create_page_renders_import_form(client):
+    user = User.objects.create_superuser(username="imp_page", password="testpass123")
+    client.force_login(user)
+    response = client.get(reverse("database-create"))
+    content = response.content.decode()
+    assert "Import from file" in content
+    assert reverse("database-import") in content
+
+
+# ---------------------------------------------------------------------------
+# Navbar tabs-lift restyle tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_navbar_uses_tabs_lift_class(client, sqlite_database):
+    response = client.get(reverse("database-detail", kwargs={"public_id": sqlite_database.public_id}))
+    content = response.content.decode()
+    assert 'role="tablist"' in content
+    assert "tabs tabs-lift" in content
+    assert 'role="tab"' in content
+
+
+@pytest.mark.django_db
+def test_navbar_active_tab_has_tab_active_class(client, sqlite_database):
+    response = client.get(reverse("database-detail", kwargs={"public_id": sqlite_database.public_id}))
+    content = response.content.decode()
+    assert "tab-active" in content

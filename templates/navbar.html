@@ -6,11 +6,11 @@
             </svg>
         </button>
     </div>
-    <div class="navbar-center hidden lg:flex">
-        <ul class="menu menu-horizontal gap-2 px-1">
+<div class="navbar-center hidden lg:flex">
+        <div role="tablist" class="tabs tabs-lift">
             {% for db in databases %}
-            <li>
-                <a class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-all hover:bg-base-200 hover:border-primary-soft {% if active_db_id == db.public_id %}bg-primary-soft border-primary-soft text-primary{% else %}border-base-300 text-base-content/70 bg-base-100/50{% endif %}"
+                <a role="tab"
+                   class="tab flex items-center gap-2 whitespace-nowrap {% if active_db_id == db.public_id %}tab-active{% endif %}"
                    {% if active_db_id == db.public_id %}aria-current="page"{% endif %}
                    hx-get="{% url 'database-detail' db.public_id %}"
                    hx-target="#dashboard-content"
@@ -22,11 +22,10 @@
                           title="{{ db.get_status_display }}"></span>
                     {{ db.name }}
                 </a>
-            </li>
             {% empty %}
-            <li class="text-base-content/50 text-sm flex items-center px-3">No databases connected</li>
+                <a role="tab" class="tab opacity-50">No databases connected</a>
             {% endfor %}
-        </ul>
+        </div>
     </div>
     <div class="navbar-end gap-1">
         <div class="dropdown lg:hidden">

@@ -1,14 +1,25 @@
 import json
+import os
+import tempfile
 from typing import Any
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.files import File
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from Databases.models import Database
 from Databases.forms import DatabaseForm
+from Databases.io import (
+    DatabaseExportError,
+    DatabaseImportError,
+    export_json,
+    export_sql,
+    import_sqlite_from_json,
+    import_sqlite_from_sql,
+)
 from Databases.utils import (
     check_db_connection,
     DatabaseQueryError,
@@ -502,3 +513,134 @@ def lint_sql_view(request: HttpRequest) -> HttpResponse:
     provider = request.POST.get("provider", Database.SQLITE3)
     diagnostics = lint_sql(query, provider)
     return JsonResponse({"diagnostics": diagnostics})
+
+
+@login_required
+def database_export(request: HttpRequest, public_id: str) -> HttpResponse:
+    database = _get_database_or_404(request, public_id)
+    fmt = (request.GET.get("format") or "sql").lower()
+
+    if fmt == "sql":
+        try:
+            dump = export_sql(database)
+        except DatabaseExportError as e:
+            return HttpResponse(str(e), status=501)
+        safe_name = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in database.name
+        ) or "database"
+        resp = HttpResponse(dump, content_type="application/sql")
+        resp["Content-Disposition"] = f'attachment; filename="{safe_name}.sql"'
+        return resp
+
+    if fmt == "json":
+        try:
+            payload = export_json(database)
+        except DatabaseExportError as e:
+            return HttpResponse(str(e), status=501)
+        body = json.dumps(payload, default=str, indent=2)
+        safe_name = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in database.name
+        ) or "database"
+        resp = HttpResponse(body, content_type="application/json")
+        resp["Content-Disposition"] = f'attachment; filename="{safe_name}.json"'
+        return resp
+
+    return HttpResponse("Unsupported export format. Use ?format=sql or ?format=json.", status=400)
+
+
+@login_required
+def database_import(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return HttpResponse("POST required", status=405)
+
+    uploaded = request.FILES.get("file")
+    display_name = (request.POST.get("name") or "").strip()
+    if not uploaded:
+        return _render_import_error(request, "No file was uploaded.")
+
+    original_name = uploaded.name or ""
+    ext = os.path.splitext(original_name)[1].lower()
+    if ext not in (".sql", ".json"):
+        return _render_import_error(
+            request,
+            "Unsupported file type. Only .sql and .json files are accepted.",
+        )
+
+    if not display_name:
+        display_name = os.path.splitext(original_name)[0] or "imported"
+
+    # Read the uploaded content into a temp file, then build a permanent SQLite db
+    # in the appropriate media location.
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            for chunk in uploaded.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+    except Exception as e:
+        return _render_import_error(request, f"Could not save uploaded file: {e}")
+
+    # Create the Database row first so it has a public_id; then materialize the .db
+    # at media://databases/<public_id>/<safe_filename>.db
+    db = Database.objects.create(
+        name=display_name[:255],
+        provider=Database.SQLITE3,
+        owner=request.user,
+        status=Database.UNKNOWN,
+    )
+
+    safe_filename = "imported.db"
+    relative_dir = f"databases/{db.public_id}"
+    from django.conf import settings as django_settings
+
+    abs_dir = os.path.join(str(django_settings.MEDIA_ROOT), relative_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+    abs_path = os.path.join(abs_dir, safe_filename)
+
+    try:
+        if ext == ".sql":
+            with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
+                sql_text = f.read()
+            import_sqlite_from_sql(abs_path, sql_text)
+        else:
+            with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
+                payload = json.load(f)
+            import_sqlite_from_json(abs_path, payload)
+    except (DatabaseImportError, json.JSONDecodeError, Exception) as e:
+        db.delete()
+        if os.path.exists(abs_path):
+            try:
+                os.unlink(abs_path)
+            except OSError:
+                pass
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        msg = f"{ext.lstrip('.').upper()} import failed: {e}"
+        return _render_import_error(request, msg)
+
+    try:
+        os.unlink(tmp_path)
+    except OSError:
+        pass
+
+    # Attach the .db file to the model's FileField so open_connection() finds it.
+    with open(abs_path, "rb") as f:
+        db.file.save(safe_filename, File(f), save=False)
+    db.save()
+
+    return redirect(reverse("database-detail", kwargs={"public_id": db.public_id}))
+
+
+def _render_import_error(request: HttpRequest, message: str) -> HttpResponse:
+    form = DatabaseForm()
+    return render(
+        request,
+        "Databases/database_create.html",
+        {
+            "form": form,
+            "is_sqlite": _provider_is_sqlite(form),
+            "import_error": message,
+        },
+        status=400,
+    )
